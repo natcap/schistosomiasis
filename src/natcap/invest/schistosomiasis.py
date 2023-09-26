@@ -11,12 +11,12 @@ import tempfile
 import shutil
 import sys
 
-import numpy
-
 from natcap.invest import spec_utils
 from natcap.invest import gettext
 from natcap.invest import utils
 from natcap.invest.spec_utils import u
+from natcap.invest import validation
+import numpy
 import pygeoprocessing
 import pygeoprocessing.routing
 import taskgraph
@@ -52,8 +52,8 @@ MODEL_SPEC = {
     'args_with_spatial_overlap': {
         'spatial_keys': [
             'population_count_path', 'dem_path',
-            'admin_boundaries_vector_path', 'water_temp_dry_path',
-            'water_temp_wet_path', 'water_presence_path'],
+            'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
+            'ndvi_dry_raster_path', 'ndvi_wet_raster_path'],
         'different_projections_ok': True,
     },
     'args': {
@@ -845,6 +845,7 @@ def _resample_population_raster(
     shutil.rmtree(tmp_working_dir, ignore_errors=True)
 
 
-def validate(args):
-    return None
-
+@validation.invest_validator
+def validate(args, limit_to=None):
+    return validation.validate(
+        args, MODEL_SPEC['args'], MODEL_SPEC['args_with_spatial_overlap'])

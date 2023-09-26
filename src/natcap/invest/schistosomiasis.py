@@ -42,7 +42,7 @@ MODEL_SPEC = {
             ['workspace_dir', 'results_suffix'],
             ['population_count_path', 'water_temp_dry_raster_path',
              'water_temp_wet_raster_path', 'ndvi_dry_raster_path',
-             'ndvi_wet_raster_path', 'dem_path']],
+             'ndvi_wet_raster_path', 'dem_path', 'water_presence_path']],
         "hidden": ["n_workers"],
         "forum_tag": '',
         "sampledata": {
@@ -53,7 +53,7 @@ MODEL_SPEC = {
         'spatial_keys': [
             'population_count_path', 'dem_path',
             'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
-            'ndvi_dry_raster_path', 'ndvi_wet_raster_path'],
+            'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path'],
         'different_projections_ok': True,
     },
     'args': {
@@ -118,6 +118,14 @@ MODEL_SPEC = {
             'projection_units': u.meter,
             'about': (
                 "A raster representing the ndvi for wet season."
+            ),
+        },
+        'water_presence_path': {
+            'type': 'raster',
+            'name': 'water presence',
+            'bands': {1: {'type': 'integer'}},
+            'about': (
+                "A raster indicating presence of water."
             ),
         },
         'dem_path': {
@@ -263,14 +271,14 @@ def execute(args):
     # 1) what should rasters be aligned to? What is the resolution to do operations on?
     # 2) should we align and resize at the end or up front?
 
-    squared_default_pixel_size = _square_off_pixels(args['water_temp_wet_path'])
+    squared_default_pixel_size = _square_off_pixels(args['water_temp_wet_raster_path'])
 
     raster_input_list = [
-        args['water_temp_dry_path'],
-        args['water_temp_wet_path'],
+        args['water_temp_dry_raster_path'],
+        args['water_temp_wet_raster_path'],
         args['water_presence_path'],
-        args['ndvi_dry_path'],
-        args['ndvi_wet_path'],
+        args['ndvi_dry_raster_path'],
+        args['ndvi_wet_raster_path'],
         args['dem_path']]
     aligned_input_list = [
         file_registry['aligned_water_temp_dry'],

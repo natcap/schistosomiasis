@@ -112,24 +112,24 @@ MODEL_SPEC = {
             **spec_utils.DEM,
             "projected": True
         },
-        "biophysical_table_path": {
-            "type": "csv",
-            "index_col": "suit_factor",
-            "columns": {
-                "suit_factor": {
-                    "type": "string",
-                    "about": gettext("Suitability factor")},
-                "function_type": {
-                    "type": "string",
-                    "about": gettext("Function type to model")},
-                "usle_p": {
-                    "type": "number",
-                    "about": gettext("Support practice factor for the USLE")}
-            },
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("biophysical table")
-        },
+#        "biophysical_table_path": {
+#            "type": "csv",
+#            "index_col": "suit_factor",
+#            "columns": {
+#                "suit_factor": {
+#                    "type": "string",
+#                    "about": gettext("Suitability factor")},
+#                "function_type": {
+#                    "type": "string",
+#                    "about": gettext("Function type to model")},
+#                "usle_p": {
+#                    "type": "number",
+#                    "about": gettext("Support practice factor for the USLE")}
+#            },
+#            "about": gettext(
+#                "A table mapping each suitibility factor to a function."),
+#            "name": gettext("biophysical table")
+#        },
     },
     'outputs': {
         'output': {

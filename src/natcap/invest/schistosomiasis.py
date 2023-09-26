@@ -23,8 +23,6 @@ import taskgraph
 from osgeo import gdal
 from osgeo import osr
 
-from src import schistosomiasis
-
 LOGGER = logging.getLogger(__name__)
 
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
@@ -34,9 +32,23 @@ BYTE_NODATA = 255
 SCHISTO = "Schistosomiasis"
 
 MODEL_SPEC = {
+    'model_id': 'schisto',
     'model_name': SCHISTO,
-    'pyname': SCHISTO.lower(),
+    'pyname': 'natcap.invest.schistosomiasis',
     'userguide': "",
+    'aliases': (),
+    "ui_spec": {
+        "order": [
+            ['workspace_dir', 'results_suffix'],
+            ['population_count_path', 'water_temp_dry_raster_path',
+             'water_temp_wet_raster_path', 'ndvi_dry_raster_path',
+             'ndvi_wet_raster_path', 'dem_path']],
+        "hidden": ["n_workers"],
+        "forum_tag": '',
+        "sampledata": {
+            "filename": "Foo.zip"
+        }
+    },
     'args_with_spatial_overlap': {
         'spatial_keys': [
             'population_count_path', 'dem_path',
@@ -831,3 +843,8 @@ def _resample_population_raster(
         target_population_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
 
     shutil.rmtree(tmp_working_dir, ignore_errors=True)
+
+
+def validate(args):
+    return None
+

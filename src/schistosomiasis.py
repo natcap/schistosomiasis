@@ -179,6 +179,7 @@ _INTERMEDIATE_BASE_FILES = {
     'masked_lulc': 'masked_lulc.tif',
     'aligned_mask': 'aligned_valid_pixels_mask.tif',
     'reprojected_admin_boundaries': 'reprojected_admin_boundaries.gpkg',
+    'distance': 'distance.tif',
 }
 
 
@@ -338,18 +339,25 @@ def execute(args):
         _water_velocity_sm,
         kwargs={
             'slope_path': file_registry[f'slope'],
-            'target_raster_path': file_registry[f'water_velocity_suit'],
+            'target_raster_path': file_registry['water_velocity_suit'],
         },
         dependent_task_list=[slope_task],
-        target_path_list=[file_registry[f'water_velocity_suit']],
+        target_path_list=[file_registry['water_velocity_suit']],
         task_name=f'Water Velocity Suit')
 
     ### Proximity to water
+    dist_edt_task = graph.add_task(
+        func=pygeoprocessing.distance_transform_edt,
+        args=((file_registry['aligned_water_presence'], 1), file_registry['distance']),
+        target_path_list=[file_registry['distance']],
+        dependent_task_list=[align_task],
+        task_name='distance edt')
+
     water_proximity_task = graph.add_task(
         _water_proximity,
         kwargs={
-            'water_presence_path': file_registry[f'aligned_water_presence'],
-            'target_raster_path': file_registry[f'water_proximity_suit'],
+            'water_distance_path': file_registry['distance'],
+            'target_raster_path': file_registry['water_proximity_suit'],
         },
         dependent_task_list=[align_task],
         target_path_list=[file_registry[f'water_proximity_suit']],
@@ -359,11 +367,11 @@ def execute(args):
     rural_pop_task = graph.add_task(
         _rural_population_density,
         kwargs={
-            'population_path': file_registry[f'aligned_population'],
-            'target_raster_path': file_registry[f'rural_pop_suit'],
+            'population_path': file_registry['aligned_population'],
+            'target_raster_path': file_registry['rural_pop_suit'],
         },
         dependent_task_list=[population_align_task],
-        target_path_list=[file_registry[f'rural_pop_suit']],
+        target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
 
     for season in ["dry", "wet"]:
@@ -478,26 +486,28 @@ def _ndvi_sm(ndvi_path, target_raster_path):
         [(ndvi_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
-def _water_proximity(water_presence_path, target_raster_path):
+def _water_proximity(water_distance_path, target_raster_path):
     """ """
     #ProxRisk <- function(prox){ifelse(prox<1000, 1,ifelse(prox<=15000, -0.0000714 * prox + 1.0714,0))}
-    water_presence_info = pygeoprocessing.get_raster_info(water_presence_path)
-    water_presence_nodata = water_presence_info['nodata'][0]
-    def op(water_presence_array):
+    water_distance_info = pygeoprocessing.get_raster_info(water_distance_path)
+    water_distance_nodata = water_distance_info['nodata'][0]
+    def op(water_distance_array):
         output = numpy.full(
-            water_presence_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(water_presence_array, water_presence_nodata))
+            water_distance_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
+        valid_pixels = (~numpy.isclose(water_distance_array, water_distance_nodata))
 
-        # if temp is less than 0 set to 0
-        output[valid_pixels] = (3.33 * water_presence_array[valid_pixels])
-        output[valid_pixels & (water_presence_array < 0)] = 0
-        output[valid_pixels & (water_presence_array > 0.3)] = 1
-        output[~valid_pixels] = FLOAT32_NODATA
+        # 
+        lt_km_mask = valid_pixels & (water_distance_array < 1000)
+        lt_gt_mask = valid_pixels & (water_distance_array >= 1000) & (water_distance_array <= 15000)
+        gt_mask = valid_pixels & (water_distance_array > 15000)
+        output[lt_km_mask] = 1
+        output[lt_gt_mask] = -0.0000714 * water_distance_array[lt_gt_mask] + 1.0714
+        output[gt_mask] = 0
 
         return output
 
     pygeoprocessing.raster_calculator(
-        [(water_presence_path, 1)], op, target_raster_path, gdal.GDT_Float32,
+        [(water_distance_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
 def _urbanization(surface_water_presence, target_raster_path):

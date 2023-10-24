@@ -296,7 +296,7 @@ def execute(args):
             'target_raster_path_list': aligned_input_list,
             'resample_method_list': ['near']*len(raster_input_list),
             'target_pixel_size': squared_default_pixel_size,
-            'bounding_box_mode': 'union',
+            'bounding_box_mode': 'intersection',
         },
         target_path_list=aligned_input_list,
         task_name='Align and resize input rasters'

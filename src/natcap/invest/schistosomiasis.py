@@ -19,17 +19,99 @@ from natcap.invest import validation
 import numpy
 import pygeoprocessing
 import pygeoprocessing.routing
+from pygeoprocessing import geoprocessing
 import taskgraph
 from osgeo import gdal
 from osgeo import osr
 
+import numpy
+import matplotlib.pyplot as plt
+
 LOGGER = logging.getLogger(__name__)
+
+logging.getLogger('taskgraph').setLevel('DEBUG')
 
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
 SCHISTO = "Schistosomiasis"
+
+SPEC_FUNC_TYPES = {
+    "type": "option_string",
+    "options": {
+        "default": {"display_name": gettext("Default used in paper.")},
+        "linear": {"display_name": gettext("Linear")},
+        "exponential": {"display_name": gettext("exponential")},
+        "scurve": {"display_name": gettext("scurve")},
+        "trapezoid": {"display_name": gettext("trapezoid")},
+        "gaussian": {"display_name": gettext("gaussian")},
+    },
+    "about": gettext(
+        "The function type to apply to the suitability factor."),
+    "name": gettext("Suitability function type")
+}
+SPEC_FUNC_COLS = {
+    'linear': {
+        "xa": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "ya": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "xz": { "type": "number", "about": gettext(
+                "Second points x coordinate that defines the line.")},
+        "yz": { "type": "number", "about": gettext(
+                "Second points y coordinate that defines the line.")},
+    },
+    'trapezoid': {
+        "xa": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "ya": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "xb": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "yb": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "xc": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "yc": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "xz": { "type": "number", "about": gettext(
+                "Second points x coordinate that defines the line.")},
+        "yz": { "type": "number", "about": gettext(
+                "Second points y coordinate that defines the line.")},
+    },
+    'gaussian': {
+        "mean": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "std": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "lb": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "ub": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+    },
+    'sshape': {
+        "yin": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "yfin": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "xmed": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "inv_slope": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+    },
+    'exponential': {
+        "yin": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "xmed": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+        "decay_factor": {"type": "number", "about": gettext(
+                "First points x coordinate that defines the line.")},
+        "max_dist": { "type": "number", "about": gettext(
+                "First points y coordinate that defines the line.")},
+    },
+
+}
 
 MODEL_SPEC = {
     'model_id': 'schisto',
@@ -60,6 +142,24 @@ MODEL_SPEC = {
         'workspace_dir': spec_utils.WORKSPACE,
         'results_suffix': spec_utils.SUFFIX,
         'n_workers': spec_utils.N_WORKERS,
+        "calc_population": {
+            "type": "boolean",
+            "about": gettext("Calculate population."),
+            "name": gettext("calculate population")
+        },
+        "population_func_type": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_population",
+        },
+        "population_table_path": {
+            "type": "csv",
+            #"index_col": "suit_factor",
+            #"columns": **SPEC_FUNC_COLS['population_func_type'],
+            "required": "population_func_type != default",
+            "about": gettext(
+                "A table mapping each suitibility factor to a function."),
+            "name": gettext("population table")
+        },
         'population_count_path': {
             'type': 'raster',
             'name': 'population raster',
@@ -72,6 +172,72 @@ MODEL_SPEC = {
                 "A raster representing the number of inhabitants per pixel."
             ),
         },
+        "calc_water_distance": {
+            "type": "boolean",
+            "about": gettext("Calculate water_distance."),
+            "name": gettext("calculate water_distance")
+        },
+        "water_distance_func_type": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_water_distance",
+        },
+        "water_distance_table_path": {
+            "type": "csv",
+            #"index_col": "suit_factor",
+            #"columns": **SPEC_FUNC_COLS['water_distance_func_type'],
+            "required": "water_distance_func_type != default",
+            "about": gettext(
+                "A table mapping each suitibility factor to a function."),
+            "name": gettext("water_distance table")
+        },
+        'water_presence_path': {
+            'type': 'raster',
+            'name': 'water presence',
+            'bands': {1: {'type': 'integer'}},
+            'about': (
+                "A raster indicating presence of water."
+            ),
+        },
+        "calc_water_velocity": {
+            "type": "boolean",
+            "about": gettext("Calculate water_velocity."),
+            "name": gettext("calculate water_velocity")
+        },
+        "water_velocity_func_type": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_water_velocity",
+        },
+        "water_velocity_table_path": {
+            "type": "csv",
+            #"index_col": "suit_factor",
+            #"columns": **SPEC_FUNC_COLS['water_velocity_func_type'],
+            "required": "water_velocity_func_type != default",
+            "about": gettext(
+                "A table mapping each suitibility factor to a function."),
+            "name": gettext("water_velocity table")
+        },
+        'dem_path': {
+            **spec_utils.DEM,
+            "projected": True
+        },
+        "calc_temperature": {
+            "type": "boolean",
+            "about": gettext("Calculate temperature."),
+            "name": gettext("calculate temperature")
+        },
+        "temperature_func_type": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_temperature",
+        },
+        "temperature_table_path": {
+            "type": "csv",
+            #"index_col": "suit_factor",
+            #"columns": **SPEC_FUNC_COLS['temperature_func_type'],
+            "required": "temperature_func_type != default",
+            "about": gettext(
+                "A table mapping each suitibility factor to a function."),
+            "name": gettext("temperature table")
+        },
         'water_temp_dry_raster_path': {
             'type': 'raster',
             'name': 'water temp dry raster',
@@ -83,6 +249,7 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the water temp for dry season."
             ),
+            "required": "calc_temperature",
         },
         'water_temp_wet_raster_path': {
             'type': 'raster',
@@ -95,6 +262,25 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the water temp for wet season."
             ),
+            "required": "calc_temperature",
+        },
+        "calc_ndvi": {
+            "type": "boolean",
+            "about": gettext("Calculate ndvi."),
+            "name": gettext("calculate ndvi")
+        },
+        "ndvi_func_type": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_ndvi",
+        },
+        "ndvi_table_path": {
+            "type": "csv",
+            #"index_col": "suit_factor",
+            #"columns": **SPEC_FUNC_COLS['ndvi_func_type'],
+            "required": "ndvi_func_type != default",
+            "about": gettext(
+                "A table mapping each suitibility factor to a function."),
+            "name": gettext("ndvi table")
         },
         'ndvi_dry_raster_path': {
             'type': 'raster',
@@ -107,6 +293,7 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the ndvi for dry season."
             ),
+            "required": "calc_ndvi",
         },
         'ndvi_wet_raster_path': {
             'type': 'raster',
@@ -119,37 +306,8 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the ndvi for wet season."
             ),
+            "required": "calc_ndvi",
         },
-        'water_presence_path': {
-            'type': 'raster',
-            'name': 'water presence',
-            'bands': {1: {'type': 'integer'}},
-            'about': (
-                "A raster indicating presence of water."
-            ),
-        },
-        'dem_path': {
-            **spec_utils.DEM,
-            "projected": True
-        },
-#        "biophysical_table_path": {
-#            "type": "csv",
-#            "index_col": "suit_factor",
-#            "columns": {
-#                "suit_factor": {
-#                    "type": "string",
-#                    "about": gettext("Suitability factor")},
-#                "function_type": {
-#                    "type": "string",
-#                    "about": gettext("Function type to model")},
-#                "usle_p": {
-#                    "type": "number",
-#                    "about": gettext("Support practice factor for the USLE")}
-#            },
-#            "about": gettext(
-#                "A table mapping each suitibility factor to a function."),
-#            "name": gettext("biophysical table")
-#        },
     },
     'outputs': {
         'output': {
@@ -187,6 +345,8 @@ _OUTPUT_BASE_FILES = {
 _INTERMEDIATE_BASE_FILES = {
     'aligned_population': 'aligned_population.tif',
     'masked_population': 'masked_population.tif',
+    'population_density': 'population_density.tif',
+    'population_hectares': 'population_hectare.tif',
     'aligned_water_temp_dry': 'aligned_water_temp_dry.tif',
     'aligned_water_temp_wet': 'aligned_water_temp_wet.tif',
     'aligned_ndvi_dry': 'aligned_ndvi_dry.tif',
@@ -194,12 +354,18 @@ _INTERMEDIATE_BASE_FILES = {
     'aligned_dem': 'aligned_dem.tif',
     'pit_filled_dem': 'pit_filled_dem.tif',
     'slope': 'slope.tif',
+    'degree_slope': 'degree_slope.tif',
     'aligned_water_presence': 'aligned_water_presence.tif',
     'aligned_lulc': 'aligned_lulc.tif',
     'masked_lulc': 'masked_lulc.tif',
     'aligned_mask': 'aligned_valid_pixels_mask.tif',
     'reprojected_admin_boundaries': 'reprojected_admin_boundaries.gpkg',
     'distance': 'distance.tif',
+    'not_water_mask': 'not_water_mask.tif',
+    'inverse_distance': 'inverse_distance.tif',
+    'water_velocity_suit_plot': 'water_vel_suit_plot.png',
+    'water_proximity_suit_plot': 'water_proximity_suit_plot.png',
+    'water_temp_suit_dry_plot': 'water_temp_suit_dry_plot.png',
 }
 
 
@@ -223,6 +389,9 @@ def execute(args):
             GDAL-compatible land-use/land-cover raster containing integer
             landcover codes.  Must be linearly projected in meters.
 
+        args['calc_ndvi'] = True
+        args['ndvi_func_type'] = 'default'
+        args['ndvi_table_path'] = ''
         args['ndvi_dry_path'] (string): (required) A string path to a
             GDAL-compatible land-use/land-cover raster containing integer
             landcover codes.  Must be linearly projected in meters.
@@ -230,6 +399,9 @@ def execute(args):
             GDAL-compatible land-use/land-cover raster containing integer
             landcover codes.  Must be linearly projected in meters.
 
+        args['calc_temperature'] = True
+        args['temperature_func_type'] = 'linear'
+        args['temperature_table_path'] = os.path.join(procured_data, 'linear-temp.csv')
         args['water_temp_dry_path'] (string): (required) A string path to a
             GDAL-compatible land-use/land-cover raster containing integer
             landcover codes.  Must be linearly projected in meters.
@@ -237,9 +409,16 @@ def execute(args):
             GDAL-compatible land-use/land-cover raster containing integer
             landcover codes.  Must be linearly projected in meters.
 
+        args['calc_population'] = True
+        args['population_func_type'] = 'default'
+        args['population_table_path'] = ''
         args['population_count_path'] (string): (required) A string path to a
             GDAL-compatible population raster containing people count per
             square km.  Must be linearly projected in meters.
+
+        args['calc_water_velocity'] = True
+        args['water_velocity_func_type'] = 'default'
+        args['water_velocity_table_path'] = ''
         args['dem_path'] (string): (required) A string path to a
             GDAL-compatible population raster containing people count per
             square km.  Must be linearly projected in meters.
@@ -247,9 +426,32 @@ def execute(args):
     """
     LOGGER.info(f"Execute {SCHISTO}")
 
+    FUNC_TYPES = {
+        'trapezoid': _trapezoid_op,
+        'linear': _linear_op,
+        'exponential': _exponential_decay_op,
+        's-curve': _sshape_op,
+        'gaussian': _gaussian_op,
+        }
+    DEFAULT_FUNC_TYPES = {
+        'temperature': _water_temp_sm,
+        'ndvi': _ndvi_sm,
+        'population': _rural_population_density,
+        'water_velocity': _water_velocity_sm,
+        'water_distance': _water_proximity,
+        }
+    PLOT_PARAMS = {
+        'temperature': (0, 50),
+        'ndvi': (-1, 1),
+        'population': (0, 10),
+        'water_velocity': (0, 30),
+        'water_distance': (0, 1000),
+        }
+
     output_dir = os.path.join(args['workspace_dir'], 'output')
     intermediate_dir = os.path.join(args['workspace_dir'], 'intermediate')
-    utils.make_directories([output_dir, intermediate_dir])
+    func_plot_dir = os.path.join(intermediate_dir, 'plot_previews')
+    utils.make_directories([output_dir, intermediate_dir, func_plot_dir])
 
     suffix = utils.make_suffix_string(args, 'results_suffix')
     file_registry = utils.build_file_registry(
@@ -266,6 +468,35 @@ def execute(args):
         # TypeError when n_workers is None.
         n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
+
+    ### Display function choices
+    # Read func params from table
+    user_func_paths = [
+        'temperature', 'ndvi', 'population', 'water_distance',
+        'water_velocity']
+    suit_func_to_use = {}
+    for suit_key in user_func_paths:
+        table_spec = MODEL_SPEC['args'][f'{suit_key}_table_path']
+        func_type = args[f'{suit_key}_func_type']
+        if func_type != 'default':
+            table_spec['columns'] = SPEC_FUNC_COLS[func_type]
+            func_params = utils.read_csv_to_dataframe(
+                args[f'{suit_key}_table_path']).to_dict(orient='list')
+            func_params = {
+                key: val[0] for key, val in func_params.items()}
+            user_func = FUNC_TYPES[func_type]
+        else:
+            func_params = None
+            user_func = DEFAULT_FUNC_TYPES[suit_key]
+
+        suit_func_to_use[suit_key] = user_func
+        results = _generic_func_values(
+            user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
+        plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
+        _plotter(
+            results[0], results[1], save_path=plot_path,
+            label_x=suit_key, label_y=func_type,
+            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
 
     ### Align and set up datasets
     #Questions
@@ -306,8 +537,10 @@ def execute(args):
     raster_info = pygeoprocessing.get_raster_info(file_registry['aligned_water_temp_wet'])
     default_bb = raster_info['bounding_box']
     default_wkt = raster_info['projection_wkt']
+    default_pixel_size = raster_info['pixel_size']
 
     # NOTE: Need to handle population differently in case of scaling
+    # Returns population count
     population_align_task = graph.add_task(
         _resample_population_raster,
         kwargs={
@@ -322,6 +555,7 @@ def execute(args):
         task_name='Align and resize population'
     )
 
+
     ### Production functions
 
     ### Habitat stability
@@ -334,29 +568,44 @@ def execute(args):
 #        target_path_list=[file_registry['aligned_population']],
 #        task_name='Resample population to LULC resolution')
 
+
+    ### Water velocity
     # fill DEM pits
-#    pit_fill_task = graph.add_task(
-#        func=pygeoprocessing.routing.fill_pits,
-#        args=(
-#            (file_registry['aligned_dem'], 1),
-#            file_registry['pit_filled_dem']),
-#        target_path_list=[file_registry['pit_filled_dem']],
-#        dependent_task_list=[align_task],
-#        task_name='fill pits')
+    # Skipping this currently because TG was always recalculating this step.
+    # So for dev purposes I'm just passing in an already pit filled DEM
+    pit_fill_task = graph.add_task(
+        func=pygeoprocessing.routing.fill_pits,
+        args=(
+            (file_registry['aligned_dem'], 1),
+            file_registry['pit_filled_dem']),
+        target_path_list=[file_registry['pit_filled_dem']],
+        dependent_task_list=[align_task],
+        task_name='fill pits')
 
     # calculate slope
     slope_task = graph.add_task(
         func=pygeoprocessing.calculate_slope,
         args=(
-            (args['dem_path'], 1),
+            (file_registry['pit_filled_dem'], 1),
             file_registry['slope']),
-        dependent_task_list=[align_task],
+        dependent_task_list=[pit_fill_task],
         target_path_list=[file_registry['slope']],
         task_name='calculate slope')
 
-    ### Water velocity
+    degree_task = graph.add_task(
+        pygeoprocessing.raster_map,
+        kwargs={
+            'op': _degree_op,
+            'rasters': [file_registry['slope']],
+            'target_path': file_registry['degree_slope'],
+            'target_nodata': -9999,
+        },
+        dependent_task_list=[slope_task],
+        target_path_list=[file_registry['degree_slope']],
+        task_name=f'Slope percent to degree')
+
     water_vel_task = graph.add_task(
-        _water_velocity_sm,
+        suit_func_to_use['water_velocity'],
         kwargs={
             'slope_path': file_registry[f'slope'],
             'target_raster_path': file_registry['water_velocity_suit'],
@@ -365,10 +614,29 @@ def execute(args):
         target_path_list=[file_registry['water_velocity_suit']],
         task_name=f'Water Velocity Suit')
 
-    ### Proximity to water
+    # Create plot of water velocity results
+    temp_water_vel_plot_path = os.path.join(intermediate_dir, 'water_vel_suit_plot.png')
+    water_vel_plot_task = graph.add_task(
+        _plot_results,
+        kwargs={
+            'input_raster_path': file_registry['slope'],
+            'output_raster_path': file_registry['water_velocity_suit'],
+            #'plot_path': file_registry['water_velocity_suit_plot'],
+            'plot_path': temp_water_vel_plot_path,
+            'suit_name': 'water_velocity',
+            'func_name': '',
+            },
+        dependent_task_list=[water_vel_task],
+        target_path_list=[temp_water_vel_plot_path],
+        task_name='plot water velocity')
+
+    ### Proximity to water in meters
     dist_edt_task = graph.add_task(
         func=pygeoprocessing.distance_transform_edt,
-        args=((file_registry['aligned_water_presence'], 1), file_registry['distance']),
+        args=(
+            (file_registry['aligned_water_presence'], 1),
+            file_registry['distance'],
+            (default_pixel_size[0], default_pixel_size[0])),
         target_path_list=[file_registry['distance']],
         dependent_task_list=[align_task],
         task_name='distance edt')
@@ -379,20 +647,63 @@ def execute(args):
             'water_distance_path': file_registry['distance'],
             'target_raster_path': file_registry['water_proximity_suit'],
         },
-        dependent_task_list=[align_task],
+        dependent_task_list=[dist_edt_task],
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
+    
+    # Create plot of water proximity results
+    temp_water_prox_plot_path = os.path.join(intermediate_dir, 'water_prox_suit_plot.png')
+    water_proximity_plot_task = graph.add_task(
+        _plot_results,
+        kwargs={
+            'input_raster_path': file_registry['distance'],
+            'output_raster_path': file_registry['water_proximity_suit'],
+            #'plot_path': file_registry['water_velocity_suit_plot'],
+            'plot_path': temp_water_prox_plot_path,
+            'suit_name': 'water_proximity',
+            'func_name': '',
+            },
+        dependent_task_list=[water_proximity_task],
+        target_path_list=[temp_water_prox_plot_path],
+        task_name='plot water proximity')
 
     ### Rural population density
+    # Population count to density in hectares
+    pop_hectare_task = graph.add_task(
+        func=_pop_count_to_density,
+        kwargs={
+            'pop_count_path': file_registry['aligned_population'],
+            'target_path': file_registry['population_hectares'],
+        },
+        target_path_list=[file_registry['population_hectares']],
+        dependent_task_list=[population_align_task],
+        task_name=f'Population count to density in hectares.')
+
     rural_pop_task = graph.add_task(
         _rural_population_density,
         kwargs={
-            'population_path': file_registry['aligned_population'],
+            'population_path': file_registry['population_hectares'],
             'target_raster_path': file_registry['rural_pop_suit'],
         },
-        dependent_task_list=[population_align_task],
+        dependent_task_list=[pop_hectare_task],
         target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
+    
+    # Create plot of population results
+    temp_pop_plot_path = os.path.join(intermediate_dir, 'pop_suit_plot.png')
+    population_plot_task = graph.add_task(
+        _plot_results,
+        kwargs={
+            'input_raster_path': file_registry['population_hectares'],
+            'output_raster_path': file_registry['rural_pop_suit'],
+            #'plot_path': file_registry['water_velocity_suit_plot'],
+            'plot_path': temp_pop_plot_path,
+            'suit_name': 'population',
+            'func_name': '',
+            },
+        dependent_task_list=[rural_pop_task],
+        target_path_list=[temp_pop_plot_path],
+        task_name='plot population')
 
     for season in ["dry", "wet"]:
         ### Water temperature
@@ -406,6 +717,22 @@ def execute(args):
             target_path_list=[file_registry[f'water_temp_suit_{season}_sm']],
             task_name=f'Water Temp Suit for {season} SM')
 
+        # Create plot of temp results
+        temp_temp_plot_path = os.path.join(intermediate_dir, 'temp_suit_plot.png')
+        temp_plot_task = graph.add_task(
+            _plot_results,
+            kwargs={
+                'input_raster_path': file_registry[f'aligned_water_temp_{season}'],
+                'output_raster_path': file_registry[f'water_temp_suit_{season}_sm'],
+                #'plot_path': file_registry['water_velocity_suit_plot'],
+                'plot_path': temp_temp_plot_path,
+                'suit_name': 'temperature',
+                'func_name': '',
+                },
+            dependent_task_list=[water_temp_task],
+            target_path_list=[temp_temp_plot_path],
+            task_name='plot temperature plot')
+
         ### Vegetation coverage (NDVI)
         ndvi_task = graph.add_task(
             _ndvi_sm,
@@ -417,21 +744,63 @@ def execute(args):
             target_path_list=[file_registry[f'ndvi_suit_{season}_sm']],
             task_name=f'NDVI Suit for {season} SM')
 
+        # Create plot of temp results
+        temp_ndvi_plot_path = os.path.join(intermediate_dir, 'ndvi_suit_plot.png')
+        ndvi_plot_task = graph.add_task(
+            _plot_results,
+            kwargs={
+                'input_raster_path': file_registry[f'aligned_ndvi_{season}'],
+                'output_raster_path': file_registry[f'ndvi_suit_{season}_sm'],
+                #'plot_path': file_registry['water_velocity_suit_plot'],
+                'plot_path': temp_ndvi_plot_path,
+                'suit_name': 'ndvi',
+                'func_name': '',
+                },
+            dependent_task_list=[ndvi_task],
+            target_path_list=[temp_ndvi_plot_path],
+            task_name='plot ndvi plot')
 
+
+    not_water_mask_task = graph.add_task(
+        func=pygeoprocessing.raster_map,
+        kwargs={
+            'op': numpy.logical_not,
+            'rasters': [file_registry['aligned_water_presence']],
+            'target_path': file_registry['not_water_mask'],
+            'target_nodata': 255,
+            },
+        target_path_list=[file_registry['not_water_mask']],
+        dependent_task_list=[align_task],
+        task_name='inverse water mask')
+
+    inverse_dist_edt_task = graph.add_task(
+        func=pygeoprocessing.distance_transform_edt,
+        args=(
+            (file_registry['not_water_mask'], 1),
+            file_registry['inverse_distance'],
+            (default_pixel_size[0], default_pixel_size[0])),
+        target_path_list=[file_registry['inverse_distance']],
+        dependent_task_list=[not_water_mask_task],
+        task_name='inverse distance edt')
     ### Population proximity to water
-
-    ### Population density
-
-
-    # save function shape plots
-
-
 
 
     graph.close()
     graph.join()
 
     LOGGER.info("Model completed")
+
+
+def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):
+    input_array = pygeoprocessing.raster_to_numpy_array(input_raster_path).flatten()
+    output_array = pygeoprocessing.raster_to_numpy_array(output_raster_path).flatten()
+    _plotter(
+        input_array, output_array, save_path=plot_path,
+        label_x=suit_name, label_y=func_name,
+        title=f'{suit_name}--{func_name}', xticks=None, yticks=None)
+
+
+def _degree_op(slope): return numpy.degrees(numpy.arctan(slope / 100.0))
 
 
 def _habitat_stability(water_presence_path, target_raster_path):
@@ -464,6 +833,7 @@ def _habitat_stability(water_presence_path, target_raster_path):
 def _water_temp_sm(water_temp_path, target_raster_path):
     """ """
     #SmWaterTemp <- function(Temp){ifelse(Temp<16, 0,ifelse(Temp<=35, -0.003 * (268/(Temp - 14.2) - 335) + 0.0336538, 0))}
+    #=IFS(TEMP<16, 0, TEMP<=35, -0.003*(268/(TEMP-14.2)-335)+0.0336538, TEMP>35, 0)
     water_temp_info = pygeoprocessing.get_raster_info(water_temp_path)
     water_temp_nodata = water_temp_info['nodata'][0]
     def op(temp_array):
@@ -554,6 +924,7 @@ def _rural_population_density(population_path, target_raster_path):
         [(population_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
+
 def _water_velocity_sm(slope_path, target_raster_path):
     """Slope suitability. """
     #WaterVel <- function(S){ifelse(S<=0.00014,-5714.3 * S + 1,-0.0029*S+0.2)}
@@ -561,22 +932,26 @@ def _water_velocity_sm(slope_path, target_raster_path):
     slope_nodata = slope_info['nodata'][0]
 
     def op(slope_array):
+        degree = numpy.full(
+            slope_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
         output = numpy.full(
             slope_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(slope_array, slope_nodata))
+        valid_pixels = ~numpy.isclose(slope_array, slope_nodata)
 
         # percent slope to degrees
-        output[valid_pixels] = numpy.degrees(numpy.arctan(slope_array[valid_pixels] / 100.0))
-        mask_lt = valid_pixels & (output <= 0.00014)
-        output[mask_lt] = -5714.3 * output[mask_lt] + 1
-        mask_gt = valid_pixels & (output > 0.00014)
-        output[mask_gt] = -0.0029 * output[mask_gt] + 0.2
+        # https://support.esri.com/en-us/knowledge-base/how-to-convert-the-slope-unit-from-percent-to-degree-in-000022558
+        degree[valid_pixels] = numpy.degrees(numpy.arctan(slope_array[valid_pixels] / 100.0))
+        mask_lt = valid_pixels & (degree <= 0.00014)
+        output[mask_lt] = -5714.3 * degree[mask_lt] + 1
+        mask_gt = valid_pixels & (degree > 0.00014)
+        output[mask_gt] = -0.0029 * degree[mask_gt] + 0.2
 
         return output
 
     pygeoprocessing.raster_calculator(
         [(slope_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
+
 
 def _trapezoid_op(raster_path):
     """ """
@@ -594,6 +969,11 @@ def _trapezoid_op(raster_path):
     xc = 30   # Start of second linear equation (end of middle plateau)
     yc = 1    # Value of middle plateau (same as yb)
 
+    slope_inc = (yb - ya) / (xb - xa)
+    slope_dec = (yc - yz) / (xc - xz)
+    intercept_inc = ya - (slope_inc * xa)
+    intercept_dec = yc - (slope_dec * xc)
+
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
@@ -603,13 +983,17 @@ def _trapezoid_op(raster_path):
         mask_one = valid_pixels & (raster_array <= xa)
         output[mask_one] = ya
         # First slope
+        mask_linear_inc = valid_pixels & (raster_array > xa) & (raster_array < xb)
+        output[mask_linear_inc] = (slope_inc * raster_array[mask_linear_inc]) + intercept_inc
         # Second plateau
         mask_three = valid_pixels & (raster_array >= xb) & (raster_array <= xc)
         output[mask_three] = yb
         # Second slope
+        mask_linear_dec = valid_pixels & (raster_array > xc) & (raster_array < xz)
+        output[mask_linear_dec] = (slope_dec * raster_array[mask_linear_dec]) + intercept_dec
         # Third plateau
-        mask_three = valid_pixels & (raster_array >= xz)
-        output[mask_three] = yz
+        mask_four = valid_pixels & (raster_array >= xz)
+        output[mask_four] = yz
 
         return output
 
@@ -617,12 +1001,13 @@ def _trapezoid_op(raster_path):
         [(raster_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
-def _gaussian_op(raster_path, target_raster_path, loc=0, scale=1, lb=0, ub=40):
+
+def _gaussian_op(raster_path, target_raster_path, mean=0, std=1, lb=0, ub=40):
     """ """
     raster_info = pygeoprocessing.get_raster_info(raster_path)
     raster_nodata = raster_info['nodata'][0]
 
-    rv = scipy.stats.norm(loc=loc, scale=scale)
+    rv = scipy.stats.norm(loc=mean, scale=std)
 
     def op(raster_array):
         output = numpy.full(
@@ -660,24 +1045,19 @@ def _sshape_op(raster_path, target_raster_path, yin=1, yfin=0, xmed=15, inv_slop
         FLOAT32_NODATA)
 
 
-def _exponential_decay_op(raster_path, target_raster_path, scalar=1, max_dist=1000):
+def _exponential_decay_op(raster_path, target_raster_path, yin=1, xmed=1, decay_factor=0.982, max_dist=1000):
     """ """
     raster_info = pygeoprocessing.get_raster_info(raster_path)
     raster_nodata = raster_info['nodata'][0]
-    xmed = 1
-    decay_factor = 0.982
 
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
         valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
 
-        output[valid_pixels] = numpy.exp(-1 * (scalar / max_dist) * raster_array[valid_pixels])
-
-        output[valid_pixels & raster_array < xmed] = 1
-        #exp_mask = valid_pixels & (raster_array >= xmed)
-        #output[exp_mask] = yin * (decay_factor**raster_array[exp_mask])
-
+        output[valid_pixels & (raster_array < xmed)] = yin
+        exp_mask = valid_pixels & (raster_array >= xmed)
+        output[exp_mask] = yin * (decay_factor**raster_array[exp_mask])
 
         return output
 
@@ -685,28 +1065,95 @@ def _exponential_decay_op(raster_path, target_raster_path, scalar=1, max_dist=10
         [(raster_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
-def _linear_op(raster_path, target_raster_path, increasing=True):
+
+def _linear_op(raster_path, target_raster_path, xa, ya, xz, yz):
     """ """
     raster_info = pygeoprocessing.get_raster_info(raster_path)
     raster_nodata = raster_info['nodata'][0]
-    intercept = 0
-    if increasing:
-        constant = 1
+
+    slope = (yz - ya) / (xz - xa)
+    intercept = ya - (slope * xa)
+
+    def op(raster_array):
+        output = numpy.full(
+            raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
+        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+
+        # First plateau
+        mask_one = valid_pixels & (raster_array <= xa)
+        output[mask_one] = ya
+        # Line
+        mask_linear_inc = valid_pixels & (raster_array > xa) & (raster_array < xz)
+        output[mask_linear_inc] = (slope * raster_array[mask_linear_inc]) + intercept
+        # Second plateau
+        mask_two = valid_pixels & (raster_array >= xz)
+        output[mask_two] = yz
+
+        return output
+
+    pygeoprocessing.raster_calculator(
+        [(raster_path, 1)], op, target_raster_path, gdal.GDT_Float32,
+        FLOAT32_NODATA)
+
+
+def _generic_func_values(func_op, xrange, working_dir, kwargs):
+    """ """
+    # Generic spatial reference
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(26910)  # NAD83 / UTM zone 11N
+    srs_wkt = srs.ExportToWkt()
+    origin = (463250, 4929700)
+    pixel_size = (30, -30)
+
+    values_x = numpy.linspace(xrange[0], xrange[1], 100).reshape(10,10)
+    nodata_x = -999
+
+    tmp_working_dir = tempfile.mkdtemp(dir=working_dir)
+
+    func_input_path = os.path.join(tmp_working_dir, f'temp-{func_op.__name__}.tif')
+    pygeoprocessing.numpy_array_to_raster(
+        values_x, nodata_x, pixel_size, origin, srs_wkt, func_input_path)
+    func_result_path = os.path.join(tmp_working_dir, f'temp-{func_op.__name__}-result.tif')
+
+    LOGGER.debug(f"func kwargs: {kwargs}")
+    if kwargs:
+        func_op(func_input_path, func_result_path, **kwargs)
     else:
-        constant = -1
+        func_op(func_input_path, func_result_path)
 
-    def op(raster_array):
-        output = numpy.full(
-            raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+    numpy_values_y = pygeoprocessing.raster_to_numpy_array(func_result_path)
 
-        output[valid_pixels] = constant * raster_array[valid_pixels] + intercept
+    shutil.rmtree(tmp_working_dir, ignore_errors=True)
 
-        return output
+    return (values_x, numpy_values_y)
 
-    pygeoprocessing.raster_calculator(
-        [(raster_path, 1)], op, target_raster_path, gdal.GDT_Float32,
-        FLOAT32_NODATA)
+
+def _plotter(values_x, values_y, save_path=None, label_x=None, label_y=None, title=None, xticks=None, yticks=None):
+    """ """
+    flattened_x_array = values_x.flatten()
+    flattened_y_array = values_y.flatten()
+    xmin=numpy.min(flattened_x_array)
+    xmax=numpy.max(flattened_x_array)
+    ymin=numpy.min(flattened_y_array)
+    ymax=numpy.max(flattened_y_array)
+
+    # plot
+    #plt.style.use('_mpl-gallery')
+    fig, ax = plt.subplots()
+
+    ax.plot(flattened_x_array, flattened_y_array, linewidth=2.0)
+
+    #ax.set(xlim=(xmin, xmax), xticks=numpy.arange(xmin + 10, xmax, 10),
+    #        ylim=(ymin-.1, ymax+.1), yticks=numpy.arange(ymin, ymax + .25, .25))
+    ax.set(xlim=(xmin, xmax), ylim=(ymin-.1, ymax+.1))
+
+    plt.xlabel(label_x)
+    plt.ylabel(label_y)
+    plt.title(title)
+    #plt.show()
+    if save_path:
+        plt.savefig(save_path)
+
 
 def _square_off_pixels(raster_path):
     """Create square pixels from the provided raster.
@@ -862,8 +1309,73 @@ def _resample_population_raster(
 
     shutil.rmtree(tmp_working_dir, ignore_errors=True)
 
+def _convert_to_from_density(source_raster_path, target_raster_path,
+        direction='to_density'):
+    """Convert a raster to/from counts/pixel and counts/unit area.
+
+    Args:
+        source_raster_path (string): The path to a raster containing units that
+            need to be converted.
+        target_raster_path (string): The path to where the target raster with
+            converted units should be stored.
+        direction='to_density' (string): The direction of unit conversion. If
+            'to_density', then the units of ``source_raster_path`` must be in
+            counts per pixel and will be converted to counts per square meter.
+            If 'from_density', then the units of ``source_raster_path`` must be
+            in counts per square meter and will be converted to counts per
+            pixel.
+
+    Returns:
+        ``None``
+    """
+    LOGGER.info(f'Converting {direction} {source_raster_path} --> '
+                f'{target_raster_path}')
+    source_raster_info = pygeoprocessing.get_raster_info(source_raster_path)
+    source_nodata = source_raster_info['nodata'][0]
+
+    # Calculate the per-pixel area based on the latitude.
+    _, miny, _, maxy = source_raster_info['bounding_box']
+    pixel_area_in_m2_by_latitude = (
+        geoprocessing._create_latitude_m2_area_column(
+            miny, maxy, source_raster_info['raster_size'][1]))
+
+    def _convert(array, pixel_area):
+        out_array = numpy.full(array.shape, FLOAT32_NODATA, dtype=numpy.float32)
+
+        valid_mask = slice(None)
+        if source_nodata is not None:
+            valid_mask = ~numpy.isclose(array, source_nodata)
+
+        if direction == 'to_density':
+            out_array[valid_mask] = array[valid_mask] / pixel_area[valid_mask]
+        elif direction == 'from_density':
+            out_array[valid_mask] = array[valid_mask] * pixel_area[valid_mask]
+        else:
+            raise AssertionError(f'Invalid direction: {direction}')
+        return out_array
+
+    pygeoprocessing.raster_calculator(
+        [(source_raster_path, 1), pixel_area_in_m2_by_latitude],
+        _convert, target_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
+
+def _pop_count_to_density(pop_count_path, target_path):
+    """Population count to population density in hectares."""
+    population_raster_info = pygeoprocessing.get_raster_info(pop_count_path)
+    pop_pixel_area = abs(numpy.multiply(*population_raster_info['pixel_size']))
+
+    kwargs={
+        'op': lambda x: (x/pop_pixel_area)*10000,  # convert count per pixel to meters sq to hectares
+        'rasters': [pop_count_path],
+        'target_path': target_path,
+        'target_nodata': -1,
+    }
+
+    pygeoprocessing.raster_map(**kwargs)
+
 
 @validation.invest_validator
 def validate(args, limit_to=None):
+    # Could roll custom validation for function defn tables
+    #biophysical_df = validation.get_validated_dataframe(table_path, spec)
     return validation.validate(
         args, MODEL_SPEC['args'], MODEL_SPEC['args_with_spatial_overlap'])

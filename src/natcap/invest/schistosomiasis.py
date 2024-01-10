@@ -499,11 +499,12 @@ def execute(args):
             title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
 
     ### Align and set up datasets
-    #Questions
+    # Questions:
     # 1) what should rasters be aligned to? What is the resolution to do operations on?
     # 2) should we align and resize at the end or up front?
 
-    squared_default_pixel_size = _square_off_pixels(args['water_temp_wet_raster_path'])
+    squared_default_pixel_size = _square_off_pixels(
+        args['water_temp_wet_raster_path'])
 
     raster_input_list = [
         args['water_temp_dry_raster_path'],
@@ -534,7 +535,8 @@ def execute(args):
     )
     align_task.join()
 
-    raster_info = pygeoprocessing.get_raster_info(file_registry['aligned_water_temp_wet'])
+    raster_info = pygeoprocessing.get_raster_info(
+        file_registry['aligned_water_temp_wet'])
     default_bb = raster_info['bounding_box']
     default_wkt = raster_info['projection_wkt']
     default_pixel_size = raster_info['pixel_size']
@@ -555,7 +557,6 @@ def execute(args):
         task_name='Align and resize population'
     )
 
-
     ### Production functions
 
     ### Habitat stability
@@ -571,6 +572,7 @@ def execute(args):
 
     ### Water velocity
     # fill DEM pits
+    # NOTE: TODO
     # Skipping this currently because TG was always recalculating this step.
     # So for dev purposes I'm just passing in an already pit filled DEM
     pit_fill_task = graph.add_task(
@@ -615,20 +617,20 @@ def execute(args):
         task_name=f'Water Velocity Suit')
 
     # Create plot of water velocity results
-    temp_water_vel_plot_path = os.path.join(intermediate_dir, 'water_vel_suit_plot.png')
-    water_vel_plot_task = graph.add_task(
-        _plot_results,
-        kwargs={
-            'input_raster_path': file_registry['slope'],
-            'output_raster_path': file_registry['water_velocity_suit'],
-            #'plot_path': file_registry['water_velocity_suit_plot'],
-            'plot_path': temp_water_vel_plot_path,
-            'suit_name': 'water_velocity',
-            'func_name': '',
-            },
-        dependent_task_list=[water_vel_task],
-        target_path_list=[temp_water_vel_plot_path],
-        task_name='plot water velocity')
+#    temp_water_vel_plot_path = os.path.join(intermediate_dir, 'water_vel_suit_plot.png')
+#    water_vel_plot_task = graph.add_task(
+#        _plot_results,
+#        kwargs={
+#            'input_raster_path': file_registry['slope'],
+#            'output_raster_path': file_registry['water_velocity_suit'],
+#            #'plot_path': file_registry['water_velocity_suit_plot'],
+#            'plot_path': temp_water_vel_plot_path,
+#            'suit_name': 'water_velocity',
+#            'func_name': '',
+#            },
+#        dependent_task_list=[water_vel_task],
+#        target_path_list=[temp_water_vel_plot_path],
+#        task_name='plot water velocity')
 
     ### Proximity to water in meters
     dist_edt_task = graph.add_task(
@@ -642,7 +644,8 @@ def execute(args):
         task_name='distance edt')
 
     water_proximity_task = graph.add_task(
-        _water_proximity,
+        #_water_proximity,
+        suit_func_to_use['water_distance'],
         kwargs={
             'water_distance_path': file_registry['distance'],
             'target_raster_path': file_registry['water_proximity_suit'],
@@ -650,23 +653,23 @@ def execute(args):
         dependent_task_list=[dist_edt_task],
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
-    
-    # Create plot of water proximity results
-    temp_water_prox_plot_path = os.path.join(intermediate_dir, 'water_prox_suit_plot.png')
-    water_proximity_plot_task = graph.add_task(
-        _plot_results,
-        kwargs={
-            'input_raster_path': file_registry['distance'],
-            'output_raster_path': file_registry['water_proximity_suit'],
-            #'plot_path': file_registry['water_velocity_suit_plot'],
-            'plot_path': temp_water_prox_plot_path,
-            'suit_name': 'water_proximity',
-            'func_name': '',
-            },
-        dependent_task_list=[water_proximity_task],
-        target_path_list=[temp_water_prox_plot_path],
-        task_name='plot water proximity')
 
+    # Create plot of water proximity results
+#    temp_water_prox_plot_path = os.path.join(intermediate_dir, 'water_prox_suit_plot.png')
+#    water_proximity_plot_task = graph.add_task(
+#        _plot_results,
+#        kwargs={
+#            'input_raster_path': file_registry['distance'],
+#            'output_raster_path': file_registry['water_proximity_suit'],
+#            #'plot_path': file_registry['water_velocity_suit_plot'],
+#            'plot_path': temp_water_prox_plot_path,
+#            'suit_name': 'water_proximity',
+#            'func_name': '',
+#            },
+#        dependent_task_list=[water_proximity_task],
+#        target_path_list=[temp_water_prox_plot_path],
+#        task_name='plot water proximity')
+#
     ### Rural population density
     # Population count to density in hectares
     pop_hectare_task = graph.add_task(
@@ -680,7 +683,8 @@ def execute(args):
         task_name=f'Population count to density in hectares.')
 
     rural_pop_task = graph.add_task(
-        _rural_population_density,
+        #_rural_population_density,
+        suit_func_to_use['population'],
         kwargs={
             'population_path': file_registry['population_hectares'],
             'target_raster_path': file_registry['rural_pop_suit'],
@@ -688,27 +692,28 @@ def execute(args):
         dependent_task_list=[pop_hectare_task],
         target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
-    
+
     # Create plot of population results
-    temp_pop_plot_path = os.path.join(intermediate_dir, 'pop_suit_plot.png')
-    population_plot_task = graph.add_task(
-        _plot_results,
-        kwargs={
-            'input_raster_path': file_registry['population_hectares'],
-            'output_raster_path': file_registry['rural_pop_suit'],
-            #'plot_path': file_registry['water_velocity_suit_plot'],
-            'plot_path': temp_pop_plot_path,
-            'suit_name': 'population',
-            'func_name': '',
-            },
-        dependent_task_list=[rural_pop_task],
-        target_path_list=[temp_pop_plot_path],
-        task_name='plot population')
+#    temp_pop_plot_path = os.path.join(intermediate_dir, 'pop_suit_plot.png')
+#    population_plot_task = graph.add_task(
+#        _plot_results,
+#        kwargs={
+#            'input_raster_path': file_registry['population_hectares'],
+#            'output_raster_path': file_registry['rural_pop_suit'],
+#            #'plot_path': file_registry['water_velocity_suit_plot'],
+#            'plot_path': temp_pop_plot_path,
+#            'suit_name': 'population',
+#            'func_name': '',
+#            },
+#        dependent_task_list=[rural_pop_task],
+#        target_path_list=[temp_pop_plot_path],
+#        task_name='plot population')
 
     for season in ["dry", "wet"]:
         ### Water temperature
         water_temp_task = graph.add_task(
-            _water_temp_sm,
+            #_water_temp_sm,
+            suit_func_to_use['temperature'],
             kwargs={
                 'water_temp_path': file_registry[f'aligned_water_temp_{season}'],
                 'target_raster_path': file_registry[f'water_temp_suit_{season}_sm'],
@@ -718,24 +723,25 @@ def execute(args):
             task_name=f'Water Temp Suit for {season} SM')
 
         # Create plot of temp results
-        temp_temp_plot_path = os.path.join(intermediate_dir, 'temp_suit_plot.png')
-        temp_plot_task = graph.add_task(
-            _plot_results,
-            kwargs={
-                'input_raster_path': file_registry[f'aligned_water_temp_{season}'],
-                'output_raster_path': file_registry[f'water_temp_suit_{season}_sm'],
-                #'plot_path': file_registry['water_velocity_suit_plot'],
-                'plot_path': temp_temp_plot_path,
-                'suit_name': 'temperature',
-                'func_name': '',
-                },
-            dependent_task_list=[water_temp_task],
-            target_path_list=[temp_temp_plot_path],
-            task_name='plot temperature plot')
+#        temp_temp_plot_path = os.path.join(intermediate_dir, 'temp_suit_plot.png')
+#        temp_plot_task = graph.add_task(
+#            _plot_results,
+#            kwargs={
+#                'input_raster_path': file_registry[f'aligned_water_temp_{season}'],
+#                'output_raster_path': file_registry[f'water_temp_suit_{season}_sm'],
+#                #'plot_path': file_registry['water_velocity_suit_plot'],
+#                'plot_path': temp_temp_plot_path,
+#                'suit_name': 'temperature',
+#                'func_name': '',
+#                },
+#            dependent_task_list=[water_temp_task],
+#            target_path_list=[temp_temp_plot_path],
+#            task_name='plot temperature plot')
 
         ### Vegetation coverage (NDVI)
         ndvi_task = graph.add_task(
-            _ndvi_sm,
+            #_ndvi_sm,
+            suit_func_to_use['ndvi'],
             kwargs={
                 'ndvi_path': file_registry[f'aligned_ndvi_{season}'],
                 'target_raster_path': file_registry[f'ndvi_suit_{season}_sm'],
@@ -745,21 +751,21 @@ def execute(args):
             task_name=f'NDVI Suit for {season} SM')
 
         # Create plot of temp results
-        temp_ndvi_plot_path = os.path.join(intermediate_dir, 'ndvi_suit_plot.png')
-        ndvi_plot_task = graph.add_task(
-            _plot_results,
-            kwargs={
-                'input_raster_path': file_registry[f'aligned_ndvi_{season}'],
-                'output_raster_path': file_registry[f'ndvi_suit_{season}_sm'],
-                #'plot_path': file_registry['water_velocity_suit_plot'],
-                'plot_path': temp_ndvi_plot_path,
-                'suit_name': 'ndvi',
-                'func_name': '',
-                },
-            dependent_task_list=[ndvi_task],
-            target_path_list=[temp_ndvi_plot_path],
-            task_name='plot ndvi plot')
-
+#        temp_ndvi_plot_path = os.path.join(intermediate_dir, 'ndvi_suit_plot.png')
+#        ndvi_plot_task = graph.add_task(
+#            _plot_results,
+#            kwargs={
+#                'input_raster_path': file_registry[f'aligned_ndvi_{season}'],
+#                'output_raster_path': file_registry[f'ndvi_suit_{season}_sm'],
+#                #'plot_path': file_registry['water_velocity_suit_plot'],
+#                'plot_path': temp_ndvi_plot_path,
+#                'suit_name': 'ndvi',
+#                'func_name': '',
+#                },
+#            dependent_task_list=[ndvi_task],
+#            target_path_list=[temp_ndvi_plot_path],
+#            task_name='plot ndvi plot')
+#
 
     not_water_mask_task = graph.add_task(
         func=pygeoprocessing.raster_map,
@@ -829,6 +835,7 @@ def _habitat_stability(water_presence_path, target_raster_path):
     pygeoprocessing.raster_calculator(
         [(water_presence_path, 1)],
         op, target_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
+
 
 def _water_temp_sm(water_temp_path, target_raster_path):
     """ """
@@ -1025,7 +1032,8 @@ def _gaussian_op(raster_path, target_raster_path, mean=0, std=1, lb=0, ub=40):
         FLOAT32_NODATA)
 
 
-def _sshape_op(raster_path, target_raster_path, yin=1, yfin=0, xmed=15, inv_slope=3):
+def _sshape_op(
+        raster_path, target_raster_path, yin=1, yfin=0, xmed=15, inv_slope=3):
     """ """
     #y = yin + (yfin - yin)/(1 + exp(-(x - xmed)/invSlope)))
     raster_info = pygeoprocessing.get_raster_info(raster_path)
@@ -1045,7 +1053,9 @@ def _sshape_op(raster_path, target_raster_path, yin=1, yfin=0, xmed=15, inv_slop
         FLOAT32_NODATA)
 
 
-def _exponential_decay_op(raster_path, target_raster_path, yin=1, xmed=1, decay_factor=0.982, max_dist=1000):
+def _exponential_decay_op(
+        raster_path, target_raster_path, yin=1, xmed=1, decay_factor=0.982,
+        max_dist=1000):
     """ """
     raster_info = pygeoprocessing.get_raster_info(raster_path)
     raster_nodata = raster_info['nodata'][0]
@@ -1097,7 +1107,22 @@ def _linear_op(raster_path, target_raster_path, xa, ya, xz, yz):
 
 
 def _generic_func_values(func_op, xrange, working_dir, kwargs):
-    """ """
+    """Call a raster based function on a generic range of values.
+
+    The point of this function is to be able to plot values in ``xrange``
+    against ``func_op(x)``. Since ``func_op`` expects a raster to operate on
+    we create a one with the values of ``xrange`` to pass in.
+
+    Args:
+        func_op (string): 
+        xrange (string): 
+        working_dir (string): 
+        kwargs (dict): 
+
+    Returns:
+        values_x (numpy array): 
+        numpy_values_y (numpy array): 
+    """
     # Generic spatial reference
     srs = osr.SpatialReference()
     srs.ImportFromEPSG(26910)  # NAD83 / UTM zone 11N
@@ -1128,7 +1153,8 @@ def _generic_func_values(func_op, xrange, working_dir, kwargs):
     return (values_x, numpy_values_y)
 
 
-def _plotter(values_x, values_y, save_path=None, label_x=None, label_y=None, title=None, xticks=None, yticks=None):
+def _plotter(values_x, values_y, save_path=None, label_x=None, label_y=None,
+             title=None, xticks=None, yticks=None):
     """ """
     flattened_x_array = values_x.flatten()
     flattened_y_array = values_y.flatten()
@@ -1153,6 +1179,8 @@ def _plotter(values_x, values_y, save_path=None, label_x=None, label_y=None, tit
     #plt.show()
     if save_path:
         plt.savefig(save_path)
+    else:
+        plt.show()
 
 
 def _square_off_pixels(raster_path):
@@ -1250,7 +1278,7 @@ def _resample_population_raster(
             """
         out_array = numpy.full(
             population.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_mask = ~utils.array_equals_nodata(population, population_nodata)
+        valid_mask = ~pygeoprocessing.array_equals_nodata(population, population_nodata)
         out_array[valid_mask] = population[valid_mask] / population_pixel_area
         return out_array
 

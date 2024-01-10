@@ -132,8 +132,10 @@ if __name__ == "__main__":
         input_data, 'sen_habsuit_NDVI_dry_2019.tif')
     raw_input_data['ndvi_wet_raster_path'] = os.path.join(
         input_data, 'sen_habsuit_NDVI_wet_2019.tif')
+    #raw_input_data['water_presence_path'] = os.path.join(
+    #    input_data, 'sen_basin_water_mask.tif')
     raw_input_data['water_presence_path'] = os.path.join(
-        input_data, 'sen_basin_water_mask.tif')
+        procured_data, 'sen_basin_water_mask_nodata.tif')
 
     work_token_dir = os.path.join(preprocess_dir, '_taskgraph_working_dir')
     n_workers = -1  # Synchronous execution

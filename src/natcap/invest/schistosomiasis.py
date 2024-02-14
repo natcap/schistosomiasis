@@ -616,22 +616,6 @@ def execute(args):
         target_path_list=[file_registry['water_velocity_suit']],
         task_name=f'Water Velocity Suit')
 
-    # Create plot of water velocity results
-#    temp_water_vel_plot_path = os.path.join(intermediate_dir, 'water_vel_suit_plot.png')
-#    water_vel_plot_task = graph.add_task(
-#        _plot_results,
-#        kwargs={
-#            'input_raster_path': file_registry['slope'],
-#            'output_raster_path': file_registry['water_velocity_suit'],
-#            #'plot_path': file_registry['water_velocity_suit_plot'],
-#            'plot_path': temp_water_vel_plot_path,
-#            'suit_name': 'water_velocity',
-#            'func_name': '',
-#            },
-#        dependent_task_list=[water_vel_task],
-#        target_path_list=[temp_water_vel_plot_path],
-#        task_name='plot water velocity')
-
     ### Proximity to water in meters
     dist_edt_task = graph.add_task(
         func=pygeoprocessing.distance_transform_edt,
@@ -654,22 +638,6 @@ def execute(args):
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
 
-    # Create plot of water proximity results
-#    temp_water_prox_plot_path = os.path.join(intermediate_dir, 'water_prox_suit_plot.png')
-#    water_proximity_plot_task = graph.add_task(
-#        _plot_results,
-#        kwargs={
-#            'input_raster_path': file_registry['distance'],
-#            'output_raster_path': file_registry['water_proximity_suit'],
-#            #'plot_path': file_registry['water_velocity_suit_plot'],
-#            'plot_path': temp_water_prox_plot_path,
-#            'suit_name': 'water_proximity',
-#            'func_name': '',
-#            },
-#        dependent_task_list=[water_proximity_task],
-#        target_path_list=[temp_water_prox_plot_path],
-#        task_name='plot water proximity')
-#
     ### Rural population density
     # Population count to density in hectares
     pop_hectare_task = graph.add_task(
@@ -693,22 +661,6 @@ def execute(args):
         target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
 
-    # Create plot of population results
-#    temp_pop_plot_path = os.path.join(intermediate_dir, 'pop_suit_plot.png')
-#    population_plot_task = graph.add_task(
-#        _plot_results,
-#        kwargs={
-#            'input_raster_path': file_registry['population_hectares'],
-#            'output_raster_path': file_registry['rural_pop_suit'],
-#            #'plot_path': file_registry['water_velocity_suit_plot'],
-#            'plot_path': temp_pop_plot_path,
-#            'suit_name': 'population',
-#            'func_name': '',
-#            },
-#        dependent_task_list=[rural_pop_task],
-#        target_path_list=[temp_pop_plot_path],
-#        task_name='plot population')
-
     for season in ["dry", "wet"]:
         ### Water temperature
         water_temp_task = graph.add_task(
@@ -722,22 +674,6 @@ def execute(args):
             target_path_list=[file_registry[f'water_temp_suit_{season}_sm']],
             task_name=f'Water Temp Suit for {season} SM')
 
-        # Create plot of temp results
-#        temp_temp_plot_path = os.path.join(intermediate_dir, 'temp_suit_plot.png')
-#        temp_plot_task = graph.add_task(
-#            _plot_results,
-#            kwargs={
-#                'input_raster_path': file_registry[f'aligned_water_temp_{season}'],
-#                'output_raster_path': file_registry[f'water_temp_suit_{season}_sm'],
-#                #'plot_path': file_registry['water_velocity_suit_plot'],
-#                'plot_path': temp_temp_plot_path,
-#                'suit_name': 'temperature',
-#                'func_name': '',
-#                },
-#            dependent_task_list=[water_temp_task],
-#            target_path_list=[temp_temp_plot_path],
-#            task_name='plot temperature plot')
-
         ### Vegetation coverage (NDVI)
         ndvi_task = graph.add_task(
             #_ndvi_sm,
@@ -749,23 +685,6 @@ def execute(args):
             dependent_task_list=[align_task],
             target_path_list=[file_registry[f'ndvi_suit_{season}_sm']],
             task_name=f'NDVI Suit for {season} SM')
-
-        # Create plot of temp results
-#        temp_ndvi_plot_path = os.path.join(intermediate_dir, 'ndvi_suit_plot.png')
-#        ndvi_plot_task = graph.add_task(
-#            _plot_results,
-#            kwargs={
-#                'input_raster_path': file_registry[f'aligned_ndvi_{season}'],
-#                'output_raster_path': file_registry[f'ndvi_suit_{season}_sm'],
-#                #'plot_path': file_registry['water_velocity_suit_plot'],
-#                'plot_path': temp_ndvi_plot_path,
-#                'suit_name': 'ndvi',
-#                'func_name': '',
-#                },
-#            dependent_task_list=[ndvi_task],
-#            target_path_list=[temp_ndvi_plot_path],
-#            task_name='plot ndvi plot')
-#
 
     not_water_mask_task = graph.add_task(
         func=pygeoprocessing.raster_map,

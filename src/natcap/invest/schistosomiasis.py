@@ -35,7 +35,7 @@ UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
-SCHISTO = "Schistosomiasis"
+SCHISTO = "Schisto alpha"
 
 SPEC_FUNC_TYPES = {
     "type": "option_string",
@@ -114,7 +114,7 @@ SPEC_FUNC_COLS = {
 }
 
 MODEL_SPEC = {
-    'model_id': 'schisto',
+    'model_id': 'schistosomiasis',
     'model_name': SCHISTO,
     'pyname': 'natcap.invest.schistosomiasis',
     'userguide': "",
@@ -126,7 +126,7 @@ MODEL_SPEC = {
              'water_temp_wet_raster_path', 'ndvi_dry_raster_path',
              'ndvi_wet_raster_path', 'dem_path', 'water_presence_path']],
         "hidden": ["n_workers"],
-        "forum_tag": '',
+        "forum_tag": 'schisto',
         "sampledata": {
             "filename": "Foo.zip"
         }
@@ -1323,7 +1323,4 @@ def _pop_count_to_density(pop_count_path, target_path):
 
 @validation.invest_validator
 def validate(args, limit_to=None):
-    # Could roll custom validation for function defn tables
-    #biophysical_df = validation.get_validated_dataframe(table_path, spec)
-    return validation.validate(
-        args, MODEL_SPEC['args'], MODEL_SPEC['args_with_spatial_overlap'])
+    return validation.validate(args, MODEL_SPEC['args'])

@@ -489,7 +489,10 @@ def execute(args):
             func_params = None
             user_func = DEFAULT_FUNC_TYPES[suit_key]
 
-        suit_func_to_use[suit_key] = user_func
+        suit_func_to_use[suit_key] = {
+            'func_name':user_func,
+            'func_params':func_params
+            }
         results = _generic_func_values(
             user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
         plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
@@ -607,11 +610,9 @@ def execute(args):
         task_name=f'Slope percent to degree')
 
     water_vel_task = graph.add_task(
-        suit_func_to_use['water_velocity'],
-        kwargs={
-            'slope_path': file_registry[f'slope'],
-            'target_raster_path': file_registry['water_velocity_suit'],
-        },
+        suit_func_to_use['water_velocity']['func_name'],
+        args=(file_registry[f'slope'], file_registry['water_velocity_suit']),
+        kwargs=suit_func_to_use['water_velocity']['func_params'],
         dependent_task_list=[slope_task],
         target_path_list=[file_registry['water_velocity_suit']],
         task_name=f'Water Velocity Suit')
@@ -629,11 +630,9 @@ def execute(args):
 
     water_proximity_task = graph.add_task(
         #_water_proximity,
-        suit_func_to_use['water_distance'],
-        kwargs={
-            'water_distance_path': file_registry['distance'],
-            'target_raster_path': file_registry['water_proximity_suit'],
-        },
+        suit_func_to_use['water_distance']['func_name'],
+        args=(file_registry['distance'], file_registry['water_proximity_suit']),
+        kwargs=suit_func_to_use['water_distance']['func_params'],
         dependent_task_list=[dist_edt_task],
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
@@ -652,11 +651,11 @@ def execute(args):
 
     rural_pop_task = graph.add_task(
         #_rural_population_density,
-        suit_func_to_use['population'],
-        kwargs={
-            'population_path': file_registry['population_hectares'],
-            'target_raster_path': file_registry['rural_pop_suit'],
-        },
+        suit_func_to_use['population']['func_name'],
+        args=(
+            file_registry['population_hectares'],
+            file_registry['rural_pop_suit']),
+        kwargs=suit_func_to_use['population']['func_params'],
         dependent_task_list=[pop_hectare_task],
         target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
@@ -665,11 +664,12 @@ def execute(args):
         ### Water temperature
         water_temp_task = graph.add_task(
             #_water_temp_sm,
-            suit_func_to_use['temperature'],
-            kwargs={
-                'water_temp_path': file_registry[f'aligned_water_temp_{season}'],
-                'target_raster_path': file_registry[f'water_temp_suit_{season}_sm'],
-            },
+            suit_func_to_use['temperature']['func_name'],
+            args=(
+                file_registry[f'aligned_water_temp_{season}'],
+                file_registry[f'water_temp_suit_{season}_sm'],
+            ),
+            kwargs=suit_func_to_use['temperature']['func_params'],
             dependent_task_list=[align_task],
             target_path_list=[file_registry[f'water_temp_suit_{season}_sm']],
             task_name=f'Water Temp Suit for {season} SM')
@@ -677,11 +677,12 @@ def execute(args):
         ### Vegetation coverage (NDVI)
         ndvi_task = graph.add_task(
             #_ndvi_sm,
-            suit_func_to_use['ndvi'],
-            kwargs={
-                'ndvi_path': file_registry[f'aligned_ndvi_{season}'],
-                'target_raster_path': file_registry[f'ndvi_suit_{season}_sm'],
-            },
+            suit_func_to_use['ndvi']['func_name'],
+            args=(
+                file_registry[f'aligned_ndvi_{season}'],
+                file_registry[f'ndvi_suit_{season}_sm'],
+            ),
+            kwargs=suit_func_to_use['ndvi']['func_params'],
             dependent_task_list=[align_task],
             target_path_list=[file_registry[f'ndvi_suit_{season}_sm']],
             task_name=f'NDVI Suit for {season} SM')

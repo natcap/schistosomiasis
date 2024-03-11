@@ -122,9 +122,17 @@ MODEL_SPEC = {
     "ui_spec": {
         "order": [
             ['workspace_dir', 'results_suffix'],
-            ['population_count_path', 'water_temp_dry_raster_path',
-             'water_temp_wet_raster_path', 'ndvi_dry_raster_path',
-             'ndvi_wet_raster_path', 'dem_path', 'water_presence_path']],
+            ["calc_population", "population_func_type",
+             "population_table_path", "population_count_path"],
+            ["calc_water_distance", "water_distance_func_type",
+             "water_distance_table_path", "water_presence_path"],
+            ["calc_water_velocity", "water_velocity_func_type",
+             "water_velocity_table_path", "dem_path"],
+            ["calc_temperature", "temperature_func_type", "temperature_table_path",
+             "water_temp_dry_raster_path", "water_temp_wet_raster_path"],
+            ["calc_ndvi", "ndvi_func_type", "ndvi_table_path",
+             "ndvi_dry_raster_path", "ndvi_wet_raster_path"]
+        ],
         "hidden": ["n_workers"],
         "forum_tag": 'schisto',
         "sampledata": {
@@ -145,17 +153,20 @@ MODEL_SPEC = {
         "calc_population": {
             "type": "boolean",
             "about": gettext("Calculate population."),
-            "name": gettext("calculate population")
+            "name": gettext("calculate population"),
+            "required": False
         },
         "population_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_population",
+            "allowed": "calc_population"
         },
         "population_table_path": {
             "type": "csv",
             #"index_col": "suit_factor",
             #"columns": **SPEC_FUNC_COLS['population_func_type'],
-            "required": "population_func_type != default",
+            "required": "calc_population and population_func_type != 'default'",
+            "allowed": "calc_population and population_func_type != 'default'",
             "about": gettext(
                 "A table mapping each suitibility factor to a function."),
             "name": gettext("population table")
@@ -171,21 +182,26 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the number of inhabitants per pixel."
             ),
+            "required": "calc_population",
+            "allowed": "calc_population"
         },
         "calc_water_distance": {
             "type": "boolean",
             "about": gettext("Calculate water_distance."),
-            "name": gettext("calculate water_distance")
+            "name": gettext("calculate water_distance"),
+            "required": False
         },
         "water_distance_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_water_distance",
+            "allowed": "calc_water_distance",
         },
         "water_distance_table_path": {
             "type": "csv",
             #"index_col": "suit_factor",
             #"columns": **SPEC_FUNC_COLS['water_distance_func_type'],
-            "required": "water_distance_func_type != default",
+            "required": "calc_water_distance and water_distance_func_type != 'default'",
+            "allowed": "calc_water_distance and water_distance_func_type != 'default'",
             "about": gettext(
                 "A table mapping each suitibility factor to a function."),
             "name": gettext("water_distance table")
@@ -197,43 +213,53 @@ MODEL_SPEC = {
             'about': (
                 "A raster indicating presence of water."
             ),
+            "required": "calc_water_distance",
+            "allowed": "calc_water_distance"
         },
         "calc_water_velocity": {
             "type": "boolean",
             "about": gettext("Calculate water_velocity."),
-            "name": gettext("calculate water_velocity")
+            "name": gettext("calculate water_velocity"),
+            "required": False
         },
         "water_velocity_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_water_velocity",
+            "allowed": "calc_water_velocity"
         },
         "water_velocity_table_path": {
             "type": "csv",
             #"index_col": "suit_factor",
             #"columns": **SPEC_FUNC_COLS['water_velocity_func_type'],
-            "required": "water_velocity_func_type != default",
+            "required": "calc_water_velocity and water_velocity_func_type != 'default'",
+            "allowed": "calc_water_velocity and water_velocity_func_type != 'default'",
             "about": gettext(
                 "A table mapping each suitibility factor to a function."),
             "name": gettext("water_velocity table")
         },
         'dem_path': {
             **spec_utils.DEM,
-            "projected": True
+            "projected": True,
+            "required": "calc_water_velocity",
+            "allowed": "calc_water_velocity"
         },
         "calc_temperature": {
             "type": "boolean",
             "about": gettext("Calculate temperature."),
-            "name": gettext("calculate temperature")
+            "name": gettext("calculate temperature"),
+            "required": False
         },
         "temperature_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_temperature",
+            "allowed": "calc_temperature"
         },
         "temperature_table_path": {
             "type": "csv",
             #"index_col": "suit_factor",
             #"columns": **SPEC_FUNC_COLS['temperature_func_type'],
-            "required": "temperature_func_type != default",
+            "required": "calc_temperature and temperature_func_type != 'default'",
+            "allowed": "calc_temperature and temperature_func_type != 'default'",
             "about": gettext(
                 "A table mapping each suitibility factor to a function."),
             "name": gettext("temperature table")
@@ -250,6 +276,7 @@ MODEL_SPEC = {
                 "A raster representing the water temp for dry season."
             ),
             "required": "calc_temperature",
+            "allowed": "calc_temperature"
         },
         'water_temp_wet_raster_path': {
             'type': 'raster',
@@ -263,21 +290,25 @@ MODEL_SPEC = {
                 "A raster representing the water temp for wet season."
             ),
             "required": "calc_temperature",
+            "allowed": "calc_temperature"
         },
         "calc_ndvi": {
             "type": "boolean",
             "about": gettext("Calculate ndvi."),
-            "name": gettext("calculate ndvi")
+            "name": gettext("calculate ndvi"),
+            "required": False
         },
         "ndvi_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_ndvi",
+            "allowed": "calc_ndvi"
         },
         "ndvi_table_path": {
             "type": "csv",
             #"index_col": "suit_factor",
             #"columns": **SPEC_FUNC_COLS['ndvi_func_type'],
-            "required": "ndvi_func_type != default",
+            "required": "calc_ndvi and ndvi_func_type != 'default'",
+            "allowed": "calc_ndvi and ndvi_func_type != 'default'",
             "about": gettext(
                 "A table mapping each suitibility factor to a function."),
             "name": gettext("ndvi table")
@@ -294,6 +325,7 @@ MODEL_SPEC = {
                 "A raster representing the ndvi for dry season."
             ),
             "required": "calc_ndvi",
+            "allowed": "calc_ndvi"
         },
         'ndvi_wet_raster_path': {
             'type': 'raster',
@@ -307,6 +339,7 @@ MODEL_SPEC = {
                 "A raster representing the ndvi for wet season."
             ),
             "required": "calc_ndvi",
+            "allowed": "calc_ndvi"
         },
     },
     'outputs': {

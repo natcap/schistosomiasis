@@ -128,7 +128,7 @@ MODEL_SPEC = {
         "hidden": ["n_workers"],
         "forum_tag": 'schisto',
         "sampledata": {
-            "filename": "Foo.zip"
+            "filename": "schisto-demo.zip"
         }
     },
     'args_with_spatial_overlap': {

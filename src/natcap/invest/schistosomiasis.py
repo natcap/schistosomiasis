@@ -385,7 +385,6 @@ _INTERMEDIATE_BASE_FILES = {
     'aligned_ndvi_dry': 'aligned_ndvi_dry.tif',
     'aligned_ndvi_wet': 'aligned_ndvi_wet.tif',
     'aligned_dem': 'aligned_dem.tif',
-    'pit_filled_dem': 'pit_filled_dem.tif',
     'slope': 'slope.tif',
     'degree_slope': 'degree_slope.tif',
     'aligned_water_presence': 'aligned_water_presence.tif',
@@ -607,23 +606,14 @@ def execute(args):
 
 
     ### Water velocity
-#    pit_fill_task = graph.add_task(
-#        func=pygeoprocessing.routing.fill_pits,
-#        args=(
-#            (file_registry['aligned_dem'], 1),
-#            file_registry['pit_filled_dem']),
-#        target_path_list=[file_registry['pit_filled_dem']],
-#        dependent_task_list=[align_task],
-#        task_name='fill pits')
-
     # calculate slope
     slope_task = graph.add_task(
         func=pygeoprocessing.calculate_slope,
         args=(
             (file_registry['aligned_dem'], 1),
             file_registry['slope']),
-        #dependent_task_list=[pit_fill_task],
         target_path_list=[file_registry['slope']],
+        dependent_task_list=[align_task],
         task_name='calculate slope')
 
     degree_task = graph.add_task(

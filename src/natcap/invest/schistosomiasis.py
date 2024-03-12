@@ -607,26 +607,22 @@ def execute(args):
 
 
     ### Water velocity
-    # fill DEM pits
-    # NOTE: TODO
-    # Skipping this currently because TG was always recalculating this step.
-    # So for dev purposes I'm just passing in an already pit filled DEM
-    pit_fill_task = graph.add_task(
-        func=pygeoprocessing.routing.fill_pits,
-        args=(
-            (file_registry['aligned_dem'], 1),
-            file_registry['pit_filled_dem']),
-        target_path_list=[file_registry['pit_filled_dem']],
-        dependent_task_list=[align_task],
-        task_name='fill pits')
+#    pit_fill_task = graph.add_task(
+#        func=pygeoprocessing.routing.fill_pits,
+#        args=(
+#            (file_registry['aligned_dem'], 1),
+#            file_registry['pit_filled_dem']),
+#        target_path_list=[file_registry['pit_filled_dem']],
+#        dependent_task_list=[align_task],
+#        task_name='fill pits')
 
     # calculate slope
     slope_task = graph.add_task(
         func=pygeoprocessing.calculate_slope,
         args=(
-            (file_registry['pit_filled_dem'], 1),
+            (file_registry['aligned_dem'], 1),
             file_registry['slope']),
-        dependent_task_list=[pit_fill_task],
+        #dependent_task_list=[pit_fill_task],
         target_path_list=[file_registry['slope']],
         task_name='calculate slope')
 

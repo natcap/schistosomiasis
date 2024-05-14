@@ -30,12 +30,17 @@ import matplotlib.pyplot as plt
 LOGGER = logging.getLogger(__name__)
 
 logging.getLogger('taskgraph').setLevel('DEBUG')
+# Was seeing a lot of font related logging
+# https://stackoverflow.com/questions/56618739/matplotlib-throws-warning-message-because-of-findfont-python
+logging.getLogger('matplotlib.font_manager').disabled = True
 
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
 SCHISTO = "Schisto alpha"
+PARASITE = {"S-haematobium": "sh", "S-mansoni": "sm"}
+SNAIL = {"Bulinus truncatus": "bt", "Biomphalaria": "bg"}
 
 SPEC_FUNC_TYPES = {
     "type": "option_string",
@@ -599,6 +604,7 @@ def execute(args):
 #        _habitat_stability,
 #        kwargs={
 #            'surface_water_presence': args['surface_water_presence'],
+#            'months': 1.75,
 #            'target_raster_path': file_registry['habitat_stability'],
 #        },
 #        target_path_list=[file_registry['aligned_population']],
@@ -748,8 +754,16 @@ def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, f
 def _degree_op(slope): return numpy.degrees(numpy.arctan(slope / 100.0))
 
 
-def _habitat_stability(water_presence_path, target_raster_path):
-    """ """
+def _habitat_stability(water_presence_path, months, target_raster_path):
+    """
+
+    Arguments:
+        water_presence_path (string): 
+        months (float): number of consecutive months for water to be considered habitat.
+        target_raster_path (string): 
+
+
+    """
     water_presence_info = pygeoprocessing.get_raster_info(water_presence_path)
     water_presence_nodata = water_presence_info['nodata'][0]
 
@@ -763,10 +777,10 @@ def _habitat_stability(water_presence_path, target_raster_path):
         lte_one_mask = (array <= 1) & valid_pixels
         output[lte_one_mask] = 0
 
-        between_mask = (array > 1) & (array <= 1.75) & valid_pixels
+        between_mask = (array > 1) & (array <= months) & valid_pixels
         output[between_mask] = 1.33 * array[between_mask] - 1.33
 
-        gt_mask = (array > 1.75) & valid_pixels
+        gt_mask = (array > months) & valid_pixels
         output[gt_mask] = 1
 
         return output

@@ -110,15 +110,17 @@ def _convert_to_from_density(source_raster_path, target_raster_path,
 
 if __name__ == "__main__":
     input_data = os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'NatCap', 'Repositories',
+        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
         'schistosomiasis', 'data', 'suitability layers')
     procured_data = os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'NatCap', 'Repositories',
+        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
         'schistosomiasis', 'data', 'procured-data')
     output_dir = os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'NatCap', 'Repositories',
+        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
         'schistosomiasis', 'data', 'output_tests_beta')
-    preprocess_dir = os.path.join(procured_data, 'preprocessed')
+    preprocess_dir = os.path.join(
+        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
+        'schistosomiasis', 'data', 'preprocessed')
     LOGGER.debug(f'Output dir: {output_dir}')
 
 
@@ -213,7 +215,7 @@ if __name__ == "__main__":
 
     # Already projected to local projection 32628 via voila web app
     # 30 x 30 resolution (1-arcsecond, 0.000277777777778 degrees)
-    dem_path = os.path.join(procured_data, 'srtm.tif')
+    dem_path = os.path.join(procured_data, 'srtm.tiff')
     # For development and testing purposes use an already pit filled DEM
     # Doing this because TaskGraph was NOT reading this task as already
     # completed and was always recalculating, which was slow for development.

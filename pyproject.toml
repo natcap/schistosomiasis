@@ -8,7 +8,7 @@ where = ["src"]
 [project]
 name = "schistosomiasis"
 version = "0.1.0"
-dependencies = ["pygeoprocessing", "taskgraph", "matplotlib"]
+dependencies = ["pygeoprocessing", "taskgraph", "matplotlib", "natcap.invest @ git+https://github.com/natcap/invest.git@feature/plugins"]
 
 [tool.natcap.invest]
 api_version = "0.0.1"

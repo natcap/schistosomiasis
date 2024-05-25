@@ -9,6 +9,7 @@ import os
 import re
 import tempfile
 import shutil
+import subprocess
 import sys
 
 from natcap.invest import spec_utils
@@ -18,6 +19,7 @@ from natcap.invest.spec_utils import u
 from natcap.invest import validation
 import numpy
 import pygeoprocessing
+import pygeoprocessing.kernels
 import pygeoprocessing.routing
 from pygeoprocessing import geoprocessing
 import taskgraph
@@ -26,6 +28,7 @@ from osgeo import osr
 
 import numpy
 import matplotlib.pyplot as plt
+from scipy.stats import gmean
 
 LOGGER = logging.getLogger(__name__)
 
@@ -39,8 +42,11 @@ FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
 SCHISTO = "Schisto alpha"
-PARASITE = {"S-haematobium": "sh", "S-mansoni": "sm"}
-SNAIL = {"Bulinus truncatus": "bt", "Biomphalaria": "bg"}
+SNAIL_PARASITE = {
+        "sh": "S-haematobium",
+        "sm": "S-mansoni",
+        "bt": "Bulinus truncatus",
+        "bg": "Biomphalaria"}
 
 SPEC_FUNC_TYPES = {
     "type": "option_string",
@@ -120,9 +126,9 @@ SPEC_FUNC_COLS = {
 
 MODEL_SPEC = {
     'model_id': 'schistosomiasis',
-    'model_name': SCHISTO,
+    'model_name': gettext(SCHISTO),
     'pyname': 'natcap.invest.schistosomiasis',
-    'userguide': "",
+    'userguide': "schistosomiasis.html",
     'aliases': (),
     "ui_spec": {
         "order": [
@@ -189,6 +195,21 @@ MODEL_SPEC = {
             ),
             "required": "calc_population",
             "allowed": "calc_population"
+        },
+        "urbanization_func_type": {
+            **SPEC_FUNC_TYPES,
+            #"required": "calc_urbanization",
+            #"allowed": "calc_urbanization"
+        },
+        "urbanization_table_path": {
+            "type": "csv",
+            #"index_col": "suit_factor",
+            #"columns": **SPEC_FUNC_COLS['urbanization_func_type'],
+            "required": "urbanization_func_type != 'default'",
+            "allowed": "urbanization_func_type != 'default'",
+            "about": gettext(
+                "A table mapping each suitibility factor to a function."),
+            "name": gettext("urbanization table")
         },
         "calc_water_distance": {
             "type": "boolean",
@@ -372,16 +393,25 @@ MODEL_SPEC = {
 _OUTPUT_BASE_FILES = {
     'water_temp_suit_dry_sm': 'water_temp_suit_dry_sm.tif',
     'water_temp_suit_wet_sm': 'water_temp_suit_wet_sm.tif',
-    'ndvi_suit_dry_sm': 'ndvi_suit_dry_sm.tif',
-    'ndvi_suit_wet_sm': 'ndvi_suit_wet_sm.tif',
+    'water_temp_suit_dry_sh': 'water_temp_suit_dry_sh.tif',
+    'water_temp_suit_wet_sh': 'water_temp_suit_wet_sh.tif',
+    'water_temp_suit_dry_bg': 'water_temp_suit_dry_bg.tif',
+    'water_temp_suit_wet_bg': 'water_temp_suit_wet_bg.tif',
+    'water_temp_suit_dry_bt': 'water_temp_suit_dry_bt.tif',
+    'water_temp_suit_wet_bt': 'water_temp_suit_wet_bt.tif',
+    'ndvi_suit_dry': 'ndvi_suit_dry.tif',
+    'ndvi_suit_wet': 'ndvi_suit_wet.tif',
     'water_velocity_suit': 'water_velocity_suit.tif',
     'water_proximity_suit': 'water_proximity_suit.tif',
     'rural_pop_suit': 'rural_pop_suit.tif',
+    'urbanization_suit': 'urbanization_suit.tif',
     #'water_stability_suit': 'water_stability_suit.tif',
+    'habitat_suit_geometric_mean': 'habitat_suit_geometric_mean.tif',
 }
 
 _INTERMEDIATE_BASE_FILES = {
     'aligned_population': 'aligned_population.tif',
+    'aligned_pop_density': 'aligned_pop_density.tif',
     'masked_population': 'masked_population.tif',
     'population_density': 'population_density.tif',
     'population_hectares': 'population_hectare.tif',
@@ -451,7 +481,10 @@ def execute(args):
         args['population_table_path'] = ''
         args['population_count_path'] (string): (required) A string path to a
             GDAL-compatible population raster containing people count per
-            square km.  Must be linearly projected in meters.
+            square km.
+        
+        args['urbanization_func_type'] = 'default'
+        args['urbanization_table_path'] = ''
 
         args['calc_water_velocity'] = True
         args['water_velocity_func_type'] = 'default'
@@ -471,16 +504,18 @@ def execute(args):
         'gaussian': _gaussian_op,
         }
     DEFAULT_FUNC_TYPES = {
-        'temperature': _water_temp_sm,
-        'ndvi': _ndvi_sm,
+        'temperature': _water_temp_suit,
+        'ndvi': _ndvi,
         'population': _rural_population_density,
-        'water_velocity': _water_velocity_sm,
+        'urbanization': _urbanization,
+        'water_velocity': _water_velocity,
         'water_distance': _water_proximity,
         }
     PLOT_PARAMS = {
         'temperature': (0, 50),
         'ndvi': (-1, 1),
         'population': (0, 10),
+        'urbanization': (0, 10),
         'water_velocity': (0, 30),
         'water_distance': (0, 1000),
         }
@@ -510,7 +545,7 @@ def execute(args):
     # Read func params from table
     user_func_paths = [
         'temperature', 'ndvi', 'population', 'water_distance',
-        'water_velocity']
+        'water_velocity', 'urbanization']
     suit_func_to_use = {}
     for suit_key in user_func_paths:
         table_spec = MODEL_SPEC['args'][f'{suit_key}_table_path']
@@ -530,13 +565,25 @@ def execute(args):
             'func_name':user_func,
             'func_params':func_params
             }
-        results = _generic_func_values(
-            user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
-        plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
-        _plotter(
-            results[0], results[1], save_path=plot_path,
-            label_x=suit_key, label_y=func_type,
-            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+        # NOTE: adding this if/else to handle snail+parasite combos for temperature suitability
+        if func_params == None and suit_key == 'temperature':
+            for op_key in SNAIL_PARASITE.keys():
+                func_params = {'op_key': op_key}
+                results = _generic_func_values(
+                    user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
+                plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}-{op_key}.png")
+                _plotter(
+                    results[0], results[1], save_path=plot_path,
+                    label_x=suit_key, label_y=func_type,
+                    title=f'{suit_key}--{func_type}-{op_key}', xticks=None, yticks=None)
+        else:
+            results = _generic_func_values(
+                user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
+            plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
+            _plotter(
+                results[0], results[1], save_path=plot_path,
+                label_x=suit_key, label_y=func_type,
+                title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
 
     ### Align and set up datasets
     # Questions:
@@ -588,6 +635,7 @@ def execute(args):
         kwargs={
             'source_population_raster_path': args['population_count_path'],
             'target_population_raster_path': file_registry['aligned_population'],
+            'target_density_aligned_raster_path': file_registry['aligned_pop_density'],
             'lulc_pixel_size': squared_default_pixel_size,
             'lulc_bb': default_bb,
             'lulc_projection_wkt': default_wkt,
@@ -598,7 +646,14 @@ def execute(args):
     )
 
     ### Production functions
+    suitability_tasks = []
+    habitat_suit_risk_paths = []
+    outputs_to_tile = []
 
+    default_color_path = os.path.join(
+        "C:", os.sep, "Users", "ddenu", "Workspace", "Repositories",
+        "schistosomiasis", "data", "water-temp-wet-colors.txt")
+    
     ### Habitat stability
 #    habitat_stability_task = graph.add_task(
 #        _habitat_stability,
@@ -609,6 +664,9 @@ def execute(args):
 #        },
 #        target_path_list=[file_registry['aligned_population']],
 #        task_name='Resample population to LULC resolution')
+    #suitability_tasks.append(habitat_suitability_task)
+        #habitat_suit_risk_paths.append(file_registry['habitat_stability'])
+    #outputs_to_tile.append((file_registry['habitat_suitability'], default_color_path))
 
 
     ### Water velocity
@@ -641,6 +699,9 @@ def execute(args):
         dependent_task_list=[slope_task],
         target_path_list=[file_registry['water_velocity_suit']],
         task_name=f'Water Velocity Suit')
+    suitability_tasks.append(water_vel_task)
+    habitat_suit_risk_paths.append(file_registry['water_velocity_suit'])
+    outputs_to_tile.append((file_registry['water_velocity_suit'], default_color_path))
 
     ### Proximity to water in meters
     dist_edt_task = graph.add_task(
@@ -661,13 +722,25 @@ def execute(args):
         dependent_task_list=[dist_edt_task],
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
+    suitability_tasks.append(water_proximity_task)
+    outputs_to_tile.append((file_registry[f'water_proximity_suit'], default_color_path))
 
-    ### Rural population density
+    ### Rural population density and urbanization
     # Population count to density in hectares
+#    pop_hectare_task = graph.add_task(
+#        func=_pop_count_to_density,
+#        kwargs={
+#            'pop_count_path': file_registry['aligned_population'],
+#            'target_path': file_registry['population_hectares'],
+#        },
+#        target_path_list=[file_registry['population_hectares']],
+#        dependent_task_list=[population_align_task],
+#        task_name=f'Population count to density in hectares.')
+    
     pop_hectare_task = graph.add_task(
-        func=_pop_count_to_density,
+        func=_pop_density_to_hectares,
         kwargs={
-            'pop_count_path': file_registry['aligned_population'],
+            'pop_density_path': file_registry['aligned_pop_density'],
             'target_path': file_registry['population_hectares'],
         },
         target_path_list=[file_registry['population_hectares']],
@@ -684,33 +757,69 @@ def execute(args):
         dependent_task_list=[pop_hectare_task],
         target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
+    suitability_tasks.append(rural_pop_task)
+    outputs_to_tile.append((file_registry[f'rural_pop_suit'], default_color_path))
+    
+    urbanization_task = graph.add_task(
+        suit_func_to_use['urbanization']['func_name'],
+        args=(
+            file_registry['population_hectares'],
+            file_registry['urbanization_suit']),
+        kwargs=suit_func_to_use['urbanization']['func_params'],
+        dependent_task_list=[pop_hectare_task],
+        target_path_list=[file_registry['urbanization_suit']],
+        task_name=f'Urbanization Suit')
+    suitability_tasks.append(urbanization_task)
+    outputs_to_tile.append((file_registry[f'urbanization_suit'], default_color_path))
 
     for season in ["dry", "wet"]:
         ### Water temperature
-        water_temp_task = graph.add_task(
-            #_water_temp_sm,
-            suit_func_to_use['temperature']['func_name'],
-            args=(
-                file_registry[f'aligned_water_temp_{season}'],
-                file_registry[f'water_temp_suit_{season}_sm'],
-            ),
-            kwargs=suit_func_to_use['temperature']['func_params'],
-            dependent_task_list=[align_task],
-            target_path_list=[file_registry[f'water_temp_suit_{season}_sm']],
-            task_name=f'Water Temp Suit for {season} SM')
+        for op_key in SNAIL_PARASITE.keys():
+            # NOTE: adding this if/else to handle default funcs for each
+            # snail+parasite combo vs manual func, where manual func will
+            # currently apply to each snail+parasite combo 
+            # If func_params are None then use op_key with default function
+            if suit_func_to_use['temperature']['func_params'] == None:
+                water_temp_task = graph.add_task(
+                    suit_func_to_use['temperature']['func_name'],
+                    args=(
+                        file_registry[f'aligned_water_temp_{season}'],
+                        file_registry[f'water_temp_suit_{season}_{op_key}'],
+                        op_key
+                    ),
+                    kwargs=suit_func_to_use['temperature']['func_params'],
+                    dependent_task_list=[align_task],
+                    target_path_list=[file_registry[f'water_temp_suit_{season}_{op_key}']],
+                    task_name=f'Water Temp Suit for {season} {op_key}')
+            else:
+                water_temp_task = graph.add_task(
+                    suit_func_to_use['temperature']['func_name'],
+                    args=(
+                        file_registry[f'aligned_water_temp_{season}'],
+                        file_registry[f'water_temp_suit_{season}_{op_key}'],
+                    ),
+                    kwargs=suit_func_to_use['temperature']['func_params'],
+                    dependent_task_list=[align_task],
+                    target_path_list=[file_registry[f'water_temp_suit_{season}_{op_key}']],
+                    task_name=f'Water Temp Suit for {season} {op_key}')
+            suitability_tasks.append(water_temp_task)
+            habitat_suit_risk_paths.append(file_registry[f'water_temp_suit_{season}_{op_key}'])
+            outputs_to_tile.append((file_registry[f'water_temp_suit_{season}_{op_key}'], default_color_path))
 
         ### Vegetation coverage (NDVI)
         ndvi_task = graph.add_task(
-            #_ndvi_sm,
             suit_func_to_use['ndvi']['func_name'],
             args=(
                 file_registry[f'aligned_ndvi_{season}'],
-                file_registry[f'ndvi_suit_{season}_sm'],
+                file_registry[f'ndvi_suit_{season}'],
             ),
             kwargs=suit_func_to_use['ndvi']['func_params'],
             dependent_task_list=[align_task],
-            target_path_list=[file_registry[f'ndvi_suit_{season}_sm']],
+            target_path_list=[file_registry[f'ndvi_suit_{season}']],
             task_name=f'NDVI Suit for {season} SM')
+        suitability_tasks.append(ndvi_task)
+        habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
+        outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
 
     not_water_mask_task = graph.add_task(
         func=pygeoprocessing.raster_map,
@@ -736,11 +845,144 @@ def execute(args):
     ### Population proximity to water
 
 
+    ### Geometric mean of water risks
+    geometric_mean_task = graph.add_task(
+        func=pygeoprocessing.raster_map,
+        kwargs={
+            'op': _geometric_mean_op,
+            'rasters': habitat_suit_risk_paths,
+            'target_path': file_registry['habitat_suit_geometric_mean'],
+            'target_nodata': BYTE_NODATA,
+            },
+        target_path_list=[file_registry['habitat_suit_geometric_mean']],
+        dependent_task_list=suitability_tasks,
+        task_name='geometric mean')
+
+
+    ### Convolve habitat suit geometric mean over land
+    decay_dist_m = 2000
+    kernel_path = os.path.join(
+        intermediate_dir, f'kernel{suffix}.tif')
+    max_dist_pixels = abs(
+        decay_dist_m / squared_default_pixel_size[0])
+    kernel_func = pygeoprocessing.kernels.create_distance_decay_kernel
+
+    def decay_func(dist_array):
+        return _kernel_gaussian(
+            dist_array, max_distance=max_dist_pixels)
+
+    kernel_kwargs = dict(
+        target_kernel_path=kernel_path,
+        distance_decay_function=decay_func,
+        max_distance=max_dist_pixels,
+        normalize=False)
+
+    kernel_task = graph.add_task(
+        kernel_func,
+        kwargs=kernel_kwargs,
+        task_name=(
+            f'Create guassian kernel - {decay_dist_m}m'),
+        target_path_list=[kernel_path])
+
+    convolved_hab_risk_path = os.path.join(
+        intermediate_dir,
+        f'distance_weighted_hab_risk_within_{decay_dist_m}{suffix}.tif')
+    convolved_hab_risk_task = graph.add_task(
+        _convolve_and_set_lower_bound,
+        kwargs={
+            'signal_path_band': (file_registry['habitat_suit_geometric_mean'], 1),
+            'kernel_path_band': (kernel_path, 1),
+            'target_path': convolved_hab_risk_path,
+            'working_dir': intermediate_dir,
+        },
+        task_name=f'Convolve hab risk - {decay_dist_m}m',
+        target_path_list=[convolved_hab_risk_path],
+        dependent_task_list=[kernel_task, geometric_mean_task])
+
+    ### Weight convolved risk by urbanization
+    risk_to_pop_path = os.path.join(
+        output_dir, f'risk_to_pop{suffix}.tif')
+    risk_to_pop_task = graph.add_task(
+        func=pygeoprocessing.raster_map,
+        kwargs={
+            'op': _multiply_op,
+            'rasters': [convolved_hab_risk_path, file_registry['urbanization_suit']],
+            'target_path': risk_to_pop_path,
+            'target_nodata': FLOAT32_NODATA,
+            },
+        target_path_list=[risk_to_pop_path],
+        dependent_task_list=[convolved_hab_risk_task, urbanization_task],
+        task_name='risk to population')
+
+    ### Multiply risk_to_pop by people count?
+#    risk_to_pop_count_path = os.path.join(
+#        output_dir, f'risk_to_pop_count{suffix}.tif')
+#    risk_to_pop_count_task = graph.add_task(
+#        func=pygeoprocessing.raster_map,
+#        kwargs={
+#            'op': _multiply_op,
+#            'rasters': [risk_to_pop_path, population_count_path],
+#            'target_path': risk_to_pop_count_path,
+#            'target_nodata': FLOAT32_NODATA,
+#        target_path_list=[risk_to_pop_count_path],
+#        dependent_task_list=[risk_to_pop_task],
+#        task_name='risk to pop_count')
+
     graph.close()
     graph.join()
 
+    ### Tile outputs
+    #tile_task = graph.add_task(
+    #    _tile_raster,
+    #    kwargs={
+    #        'raster_path': file_registry['water_temp_suit_wet_sm'],
+    #        'color_relief_path': color_relief_path,
+    #    },
+    #    task_name=f'Tile temperature',
+    #    dependent_task_list=suitability_tasks)
+    for raster_path, color_path in outputs_to_tile:
+        #_tile_raster(raster_path, color_path)
+        continue 
+
+
     LOGGER.info("Model completed")
 
+
+# raster_map op for geometric mean of habitat suitablity risk layers.
+# `arrays` is expected to be a list of numpy arrays
+def _geometric_mean_op(*arrays):
+    """ """
+    # Treat 0 values as numpy.nan so can omit them from geometric mean
+    #for array in arrays:
+    #    array[array==0] = numpy.nan
+
+    #result = gmean(arrays, axis=0, nan_policy='omit')
+    #nan_mask = numpy.isnan(result)
+    #result[nan_mask] = BYTE_NODATA
+    #return result
+    return gmean(arrays, axis=0)
+
+def _multiply_op(array_one, array_two): return numpy.multiply(array_one, array_two)
+
+def _tile_raster(raster_path, color_relief_path):
+    """ """
+    # Set up directory and paths for outputs
+    base_dir = os.path.dirname(raster_path)
+    base_name = os.path.splitext(os.path.basename(raster_path))[0]
+    rgb_raster_path = os.path.join(base_dir, f'{base_name}_rgb.tif')
+    tile_dir = os.path.join(base_dir, f'{base_name}_tiles')
+
+    if not os.path.isdir(tile_dir):
+        os.mkdir(tile_dir)
+    gdaldem_cmd = f'gdaldem color-relief -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
+    subprocess.call(gdaldem_cmd, shell=True)
+    tile_cmd = f'gdal2tiles --xyz -r near -e --zoom=1-13 --process=4 {rgb_raster_path} {tile_dir}'
+    print(tile_cmd)
+    subprocess.call(tile_cmd, shell=True)
+
+def _weighted_mean_risk_index(suitability_risk_list, target_raster_path):
+    """ """
+    pass
 
 def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):
     input_array = pygeoprocessing.raster_to_numpy_array(input_raster_path).flatten()
@@ -789,32 +1031,111 @@ def _habitat_stability(water_presence_path, months, target_raster_path):
         [(water_presence_path, 1)],
         op, target_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
 
+### Water temperature functions ###
 
-def _water_temp_sm(water_temp_path, target_raster_path):
-    """ """
+def _get_temp_op(key):
+    TEMP_OP_MAP = {
+        "sh": _water_temp_op_sh, 
+        "sm": _water_temp_op_sm, 
+        "bg": _water_temp_op_bg, 
+        "bt": _water_temp_op_bt, 
+    }
+    return TEMP_OP_MAP[key]
+
+def _water_temp_op_sm(temp_array, temp_nodata):
+    """Water temperature suitability for S. mansoni."""
     #SmWaterTemp <- function(Temp){ifelse(Temp<16, 0,ifelse(Temp<=35, -0.003 * (268/(Temp - 14.2) - 335) + 0.0336538, 0))}
     #=IFS(TEMP<16, 0, TEMP<=35, -0.003*(268/(TEMP-14.2)-335)+0.0336538, TEMP>35, 0)
+    output = numpy.full(
+        temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
+    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+
+    # if temp is less than 16 or higher than 35 set to 0
+    valid_range_mask = (temp_array>=16) & (temp_array<=35)
+    output[valid_range_mask] = (
+        -0.003 * (268 / (temp_array[valid_range_mask] - 14.2) - 335) + 0.0336538)
+    output[~valid_range_mask] = 0
+    output[nodata_pixels] = BYTE_NODATA
+
+    return output
+
+def _water_temp_op_sh(temp_array, temp_nodata):
+    """Water temperature suitability for S. haematobium."""
+    #ShWaterTemp <- function(Temp){ifelse(Temp<17, 0,ifelse(Temp<=33, -0.006 * (295/(Temp - 15.3) - 174) + 0.056, 0))}
+    output = numpy.full(
+        temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
+    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+
+    # if temp is less than 16 set to 0
+    valid_range_mask = (temp_array>=17) & (temp_array<=33)
+    output[valid_range_mask] = (
+        -0.006 * (295 / (temp_array[valid_range_mask] - 15.3) - 174) + 0.056)
+    output[~valid_range_mask] = 0
+    output[nodata_pixels] = BYTE_NODATA
+
+    return output
+
+def _water_temp_op_bt(temp_array, temp_nodata):
+    """Water temperature suitability for Bulinus truncatus."""
+    #BtruncatusWaterTempNEW <- function(Temp){ifelse(Temp<17, 0,ifelse(Temp<=33, -48.173 + 8.534e+00 * Temp + -5.568e-01 * Temp^2 + 1.599e-02 * Temp^3 + -1.697e-04 * Temp^4, 0))}
+    output = numpy.full(
+        temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
+    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+
+    # if temp is less than 16 set to 0
+    valid_range_mask = (temp_array>=17) & (temp_array<=33)
+    output[valid_range_mask] = (
+        -48.173 + (8.534 * temp_array[valid_range_mask]) + 
+        (-5.568e-01 * numpy.power(temp_array[valid_range_mask], 2)) +
+        (1.599e-02 * numpy.power(temp_array[valid_range_mask], 3)) +
+        (-1.697e-04 * numpy.power(temp_array[valid_range_mask], 4)))
+    output[~valid_range_mask] = 0
+    output[nodata_pixels] = BYTE_NODATA
+
+    return output
+
+def _water_temp_op_bg(temp_array, temp_nodata):
+    """Water temperature suitability for Biomphalaria."""
+    #BglabrataWaterTempNEW <- function(Temp){ifelse(Temp<16, 0,ifelse(Temp<=35, -29.9111 + 5.015e+00 * Temp + -3.107e-01 * Temp^2 +8.560e-03 * Temp^3 + -8.769e-05 * Temp^4, 0))}
+    output = numpy.full(
+        temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
+    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+
+    # if temp is less than 16 set to 0
+    valid_range_mask = (temp_array>=16) & (temp_array<=35)
+    output[valid_range_mask] = (
+        -29.9111 + (5.015 * temp_array[valid_range_mask]) + 
+        (-3.107e-01 * numpy.power(temp_array[valid_range_mask], 2)) +
+        (8.560e-03 * numpy.power(temp_array[valid_range_mask], 3)) +
+        (-8.769e-05 * numpy.power(temp_array[valid_range_mask], 4)))
+    output[~valid_range_mask] = 0
+    output[nodata_pixels] = BYTE_NODATA
+
+    return output
+
+
+def _water_temp_suit(water_temp_path, target_raster_path, op_key):
+    """
+
+        Args:
+            water_temp_path (string):
+            op_key (string):
+            target_raster_path (string):
+
+        Returns:
+    """
+    print(f"op_key in func: {op_key}")
     water_temp_info = pygeoprocessing.get_raster_info(water_temp_path)
     water_temp_nodata = water_temp_info['nodata'][0]
-    def op(temp_array):
-        output = numpy.full(
-            temp_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(temp_array, water_temp_nodata))
-
-        # if temp is less than 16 set to 0
-        valid_range_mask = (temp_array>=16) & (temp_array<=35)
-        output[valid_pixels] = (
-            -0.003 * (268 / (temp_array[valid_pixels] - 14.2) - 335) + 0.0336538)
-        output[~valid_range_mask] = 0
-        output[~valid_pixels] = FLOAT32_NODATA
-
-        return output
+    op = _get_temp_op(op_key)
 
     pygeoprocessing.raster_calculator(
-        [(water_temp_path, 1)], op, target_raster_path, gdal.GDT_Float32,
-        FLOAT32_NODATA)
+        [(water_temp_path, 1), (water_temp_nodata, "raw")], op,
+        target_raster_path, gdal.GDT_Float32, BYTE_NODATA)
 
-def _ndvi_sm(ndvi_path, target_raster_path):
+### End water temperature functions ###
+
+def _ndvi(ndvi_path, target_raster_path):
     """ """
     #VegCoverage <- function(V){ifelse(V<0,0,ifelse(V<=0.3,3.33*V,1))}
     ndvi_info = pygeoprocessing.get_raster_info(ndvi_path)
@@ -860,10 +1181,31 @@ def _water_proximity(water_distance_path, target_raster_path):
         [(water_distance_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
-def _urbanization(surface_water_presence, target_raster_path):
-    """ """
-    #UrbanRisk <- function(h){ifelse(h<1,1,1/(1+exp((h-3)/0.4)))}
-    pass
+def _urbanization(pop_density_path, target_raster_path):
+    """
+
+    UrbanRisk <- function(h){ifelse(h<1,1,1/(1+exp((h-3)/0.4)))}
+
+    Args:
+        pop_density_path (string): population density in per hectare
+
+    """
+    population_info = pygeoprocessing.get_raster_info(pop_density_path)
+    population_nodata = population_info['nodata'][0]
+    def op(pop_density_array):
+        output = numpy.full(
+            pop_density_array.shape, BYTE_NODATA, dtype=numpy.float32)
+        valid_pixels = (~numpy.isclose(pop_density_array, population_nodata))
+
+        output[valid_pixels] = (
+            1 / (1 + numpy.exp((pop_density_array[valid_pixels] - 3) / 0.4)))
+        output[valid_pixels & (pop_density_array < 1)] = 1
+
+        return output
+
+    pygeoprocessing.raster_calculator(
+        [(pop_density_path, 1)], op, target_raster_path, gdal.GDT_Float32,
+        BYTE_NODATA)
 
 def _rural_population_density(population_path, target_raster_path):
     """ """
@@ -885,7 +1227,7 @@ def _rural_population_density(population_path, target_raster_path):
         FLOAT32_NODATA)
 
 
-def _water_velocity_sm(slope_path, target_raster_path):
+def _water_velocity(slope_path, target_raster_path):
     """Slope suitability. """
     #WaterVel <- function(S){ifelse(S<=0.00014,-5714.3 * S + 1,-0.0029*S+0.2)}
     slope_info = pygeoprocessing.get_raster_info(slope_path)
@@ -1169,14 +1511,15 @@ def _square_off_pixels(raster_path):
 
 def _resample_population_raster(
         source_population_raster_path, target_population_raster_path,
+        target_density_aligned_raster_path,
         lulc_pixel_size, lulc_bb, lulc_projection_wkt, working_dir):
     """Resample a population raster without losing or gaining people.
 
     Population rasters are an interesting special case where the data are
     neither continuous nor categorical, and the total population count
-    typically matters.  Common resampling methods for continuous
+    typically matters. Common resampling methods for continuous
     (interpolation) and categorical (nearest-neighbor) datasets leave room for
-    the total population of a resampled raster to significantly change.  This
+    the total population of a resampled raster to significantly change. This
     function resamples a population raster with the following steps:
 
         1. Convert a population count raster to population density per pixel
@@ -1210,7 +1553,7 @@ def _resample_population_raster(
     tmp_working_dir = tempfile.mkdtemp(dir=working_dir)
     population_raster_info = pygeoprocessing.get_raster_info(
         source_population_raster_path)
-    pixel_area = numpy.multiply(*population_raster_info['pixel_size'])
+    pixel_area = abs(numpy.multiply(*population_raster_info['pixel_size']))
     population_nodata = population_raster_info['nodata'][0]
 
     population_srs = osr.SpatialReference()
@@ -1247,7 +1590,7 @@ def _resample_population_raster(
     pygeoprocessing.warp_raster(
         density_raster_path,
         target_pixel_size=lulc_pixel_size,
-        target_raster_path=warped_density_path,
+        target_raster_path=target_density_aligned_raster_path,
         resample_method='bilinear',
         target_bb=lulc_bb,
         target_projection_wkt=lulc_projection_wkt)
@@ -1284,11 +1627,11 @@ def _resample_population_raster(
         return out_array
 
     pygeoprocessing.raster_calculator(
-        [(warped_density_path, 1)],
+        [(target_density_aligned_raster_path, 1)],
         _convert_density_to_population,
         target_population_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
 
-    shutil.rmtree(tmp_working_dir, ignore_errors=True)
+    #shutil.rmtree(tmp_working_dir, ignore_errors=True)
 
 def _convert_to_from_density(source_raster_path, target_raster_path,
         direction='to_density'):
@@ -1353,6 +1696,84 @@ def _pop_count_to_density(pop_count_path, target_path):
 
     pygeoprocessing.raster_map(**kwargs)
 
+def _pop_density_to_hectares(pop_density_path, target_path):
+    """Population density in square km to population density in hectares."""
+    population_raster_info = pygeoprocessing.get_raster_info(pop_density_path)
+
+    kwargs={
+        'op': lambda x: x/100,  # convert count per pixel to meters sq to hectares
+        'rasters': [pop_density_path],
+        'target_path': target_path,
+        'target_nodata': -1,
+    }
+
+    pygeoprocessing.raster_map(**kwargs)
+
+
+
+
+def _kernel_gaussian(distance, max_distance):
+    """Create a gaussian kernel.
+
+    Args:
+        distance (numpy.array): An array of euclidean distances (in pixels)
+            from the center of the kernel.
+        max_distance (float): The maximum distance of the kernel.  Pixels that
+            are more than this number of pixels will have a value of 0.
+
+    Returns:
+        ``numpy.array`` with dtype of numpy.float32 and same shape as
+        ``distance.
+    """
+    kernel = numpy.zeros(distance.shape, dtype=numpy.float32)
+    pixels_in_radius = (distance <= max_distance)
+    kernel[pixels_in_radius] = (
+        (numpy.e ** (-0.5 * ((distance[pixels_in_radius] / max_distance) ** 2))
+         - numpy.e ** (-0.5)) / (1 - numpy.e ** (-0.5)))
+    return kernel
+
+
+def _convolve_and_set_lower_bound(
+        signal_path_band, kernel_path_band, target_path, working_dir):
+    """Convolve a raster and set all values below 0 to 0.
+
+    Args:
+        signal_path_band (tuple): A 2-tuple of (signal_raster_path, band_index)
+            to use as the signal raster in the convolution.
+        kernel_path_band (tuple): A 2-tuple of (kernel_raster_path, band_index)
+            to use as the kernel raster in the convolution.  This kernel should
+            be non-normalized.
+        target_path (string): Where the target raster should be written.
+        working_dir (string): The working directory that
+            ``pygeoprocessing.convolve_2d`` may use for its intermediate files.
+
+    Returns:
+        ``None``
+    """
+    pygeoprocessing.convolve_2d(
+        signal_path_band=signal_path_band,
+        kernel_path_band=kernel_path_band,
+        target_path=target_path,
+        working_dir=working_dir,
+        mask_nodata=False,
+        #normalize_kernel=True
+        )
+
+    # Sometimes there are negative values that should have been clamped to 0 in
+    # the convolution but weren't, so let's clamp them to avoid support issues
+    # later on.
+    target_raster = gdal.OpenEx(target_path, gdal.GA_Update)
+    target_band = target_raster.GetRasterBand(1)
+    target_nodata = target_band.GetNoDataValue()
+    for block_data, block in pygeoprocessing.iterblocks(
+            (target_path, 1)):
+        valid_pixels = ~pygeoprocessing.array_equals_nodata(block, target_nodata)
+        block[(block < 0) & valid_pixels] = 0
+        target_band.WriteArray(
+            block, xoff=block_data['xoff'], yoff=block_data['yoff'])
+
+    target_band = None
+    target_raster = None
 
 @validation.invest_validator
 def validate(args, limit_to=None):

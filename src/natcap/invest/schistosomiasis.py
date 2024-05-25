@@ -142,7 +142,8 @@ MODEL_SPEC = {
             ["calc_temperature", "temperature_func_type", "temperature_table_path",
              "water_temp_dry_raster_path", "water_temp_wet_raster_path"],
             ["calc_ndvi", "ndvi_func_type", "ndvi_table_path",
-             "ndvi_dry_raster_path", "ndvi_wet_raster_path"]
+             "ndvi_dry_raster_path", "ndvi_wet_raster_path"],
+            ["urbanization_func_type", "urbanization_table_path"],
         ],
         "hidden": ["n_workers"],
         "forum_tag": 'schisto',
@@ -198,7 +199,7 @@ MODEL_SPEC = {
         },
         "urbanization_func_type": {
             **SPEC_FUNC_TYPES,
-            #"required": "calc_urbanization",
+            "required": True,
             #"allowed": "calc_urbanization"
         },
         "urbanization_table_path": {

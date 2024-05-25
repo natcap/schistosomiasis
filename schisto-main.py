@@ -229,8 +229,10 @@ if __name__ == "__main__":
     args['water_distance_table_path'] = os.path.join(procured_data, 'exponential-water-distance.csv')
 
     args['calc_temperature'] = True
-    args['temperature_func_type'] = 'linear'
-    args['temperature_table_path'] = os.path.join(procured_data, 'linear-temperature.csv')
+    args['temperature_func_type'] = 'default'
+    args['temperature_table_path'] = ''
+    #args['temperature_func_type'] = 'linear'
+    #args['temperature_table_path'] = os.path.join(procured_data, 'linear-temperature.csv')
 
     args['calc_ndvi'] = True
     args['ndvi_func_type'] = 'default'
@@ -240,6 +242,10 @@ if __name__ == "__main__":
     args['population_func_type'] = 'default'
     args['population_table_path'] = ''
     args['population_count_path'] = population_proj_count_path
+    #args['population_count_path'] = population_count_path
+    
+    args['urbanization_func_type'] = 'default'
+    args['urbanization_table_path'] = ''
 
     args['calc_water_velocity'] = True
     args['water_velocity_func_type'] = 'default'

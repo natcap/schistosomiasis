@@ -101,7 +101,7 @@ SPEC_FUNC_COLS = {
         "ub": { "type": "number", "about": gettext(
                 "First points y coordinate that defines the line.")},
     },
-    'sshape': {
+    'scurve': {
         "yin": {"type": "number", "about": gettext(
                 "First points x coordinate that defines the line.")},
         "yfin": { "type": "number", "about": gettext(
@@ -120,8 +120,58 @@ SPEC_FUNC_COLS = {
                 "First points x coordinate that defines the line.")},
         "max_dist": { "type": "number", "about": gettext(
                 "First points y coordinate that defines the line.")},
-    },
+    }
+}
 
+
+FUNCS = ['linear', 'trapezoid', 'gaussian', 'scurve', 'exponential']
+
+FUNC_PARAMS = {
+    'population': {
+        f'population_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_population and population_func_type == '{fn}'",
+            "allowed": f"calc_population and population_func_type == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    },
+    'water_distance': {
+        f'water_distance_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_water_distance and water_distance_func_type == '{fn}'",
+            "allowed": f"calc_water_distance and water_distance_func_type == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    },
+    'water_velocity': {
+        f'water_velocity_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_water_velocity and water_velocity_func_type == '{fn}'",
+            "allowed": f"calc_water_velocity and water_velocity_func_type == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    },
+    'temperature': {
+        f'temperature_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_temperature and temperature_func_type == '{fn}'",
+            "allowed": f"calc_temperature and temperature_func_type == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    },
+    'ndvi': {
+        f'ndvi_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_ndvi and ndvi_func_type == '{fn}'",
+            "allowed": f"calc_ndvi and ndvi_func_type == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    }
 }
 
 MODEL_SPEC = {
@@ -134,15 +184,20 @@ MODEL_SPEC = {
         "order": [
             ['workspace_dir', 'results_suffix'],
             ["calc_population", "population_func_type",
-             "population_table_path", "population_count_path"],
+             "population_count_path",
+             *list(FUNC_PARAMS['population'].keys())],
             ["calc_water_distance", "water_distance_func_type",
-             "water_distance_table_path", "water_presence_path"],
+             "water_presence_path",
+             *list(FUNC_PARAMS['water_distance'].keys())],
             ["calc_water_velocity", "water_velocity_func_type",
-             "water_velocity_table_path", "dem_path"],
-            ["calc_temperature", "temperature_func_type", "temperature_table_path",
-             "water_temp_dry_raster_path", "water_temp_wet_raster_path"],
-            ["calc_ndvi", "ndvi_func_type", "ndvi_table_path",
-             "ndvi_dry_raster_path", "ndvi_wet_raster_path"],
+             "dem_path",
+             *list(FUNC_PARAMS['water_velocity'].keys())],
+            ["calc_temperature", "temperature_func_type",
+             "water_temp_dry_raster_path", "water_temp_wet_raster_path",
+             *list(FUNC_PARAMS['temperature'].keys())],
+            ["calc_ndvi", "ndvi_func_type",
+             "ndvi_dry_raster_path", "ndvi_wet_raster_path",
+             *list(FUNC_PARAMS['ndvi'].keys())],
             ["urbanization_func_type", "urbanization_table_path"],
         ],
         "hidden": ["n_workers"],
@@ -173,16 +228,6 @@ MODEL_SPEC = {
             "required": "calc_population",
             "allowed": "calc_population"
         },
-        "population_table_path": {
-            "type": "csv",
-            #"index_col": "suit_factor",
-            #"columns": **SPEC_FUNC_COLS['population_func_type'],
-            "required": "calc_population and population_func_type != 'default'",
-            "allowed": "calc_population and population_func_type != 'default'",
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("population table")
-        },
         'population_count_path': {
             'type': 'raster',
             'name': 'population raster',
@@ -197,6 +242,7 @@ MODEL_SPEC = {
             "required": "calc_population",
             "allowed": "calc_population"
         },
+        **FUNC_PARAMS['population'],
         "urbanization_func_type": {
             **SPEC_FUNC_TYPES,
             "required": True,
@@ -214,24 +260,14 @@ MODEL_SPEC = {
         },
         "calc_water_distance": {
             "type": "boolean",
-            "about": gettext("Calculate water_distance."),
-            "name": gettext("calculate water_distance"),
+            "about": gettext("Calculate water distance."),
+            "name": gettext("calculate water distance"),
             "required": False
         },
         "water_distance_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_water_distance",
             "allowed": "calc_water_distance",
-        },
-        "water_distance_table_path": {
-            "type": "csv",
-            #"index_col": "suit_factor",
-            #"columns": **SPEC_FUNC_COLS['water_distance_func_type'],
-            "required": "calc_water_distance and water_distance_func_type != 'default'",
-            "allowed": "calc_water_distance and water_distance_func_type != 'default'",
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("water_distance table")
         },
         'water_presence_path': {
             'type': 'raster',
@@ -243,10 +279,11 @@ MODEL_SPEC = {
             "required": "calc_water_distance",
             "allowed": "calc_water_distance"
         },
+        **FUNC_PARAMS['water_distance'],
         "calc_water_velocity": {
             "type": "boolean",
-            "about": gettext("Calculate water_velocity."),
-            "name": gettext("calculate water_velocity"),
+            "about": gettext("Calculate water velocity."),
+            "name": gettext("calculate water velocity"),
             "required": False
         },
         "water_velocity_func_type": {
@@ -254,16 +291,7 @@ MODEL_SPEC = {
             "required": "calc_water_velocity",
             "allowed": "calc_water_velocity"
         },
-        "water_velocity_table_path": {
-            "type": "csv",
-            #"index_col": "suit_factor",
-            #"columns": **SPEC_FUNC_COLS['water_velocity_func_type'],
-            "required": "calc_water_velocity and water_velocity_func_type != 'default'",
-            "allowed": "calc_water_velocity and water_velocity_func_type != 'default'",
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("water_velocity table")
-        },
+        **FUNC_PARAMS['water_velocity'],
         'dem_path': {
             **spec_utils.DEM,
             "projected": True,
@@ -281,16 +309,7 @@ MODEL_SPEC = {
             "required": "calc_temperature",
             "allowed": "calc_temperature"
         },
-        "temperature_table_path": {
-            "type": "csv",
-            #"index_col": "suit_factor",
-            #"columns": **SPEC_FUNC_COLS['temperature_func_type'],
-            "required": "calc_temperature and temperature_func_type != 'default'",
-            "allowed": "calc_temperature and temperature_func_type != 'default'",
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("temperature table")
-        },
+        **FUNC_PARAMS['temperature'],
         'water_temp_dry_raster_path': {
             'type': 'raster',
             'name': 'water temp dry raster',
@@ -321,8 +340,8 @@ MODEL_SPEC = {
         },
         "calc_ndvi": {
             "type": "boolean",
-            "about": gettext("Calculate ndvi."),
-            "name": gettext("calculate ndvi"),
+            "about": gettext("Calculate NDVI."),
+            "name": gettext("calculate NDVI"),
             "required": False
         },
         "ndvi_func_type": {
@@ -330,16 +349,7 @@ MODEL_SPEC = {
             "required": "calc_ndvi",
             "allowed": "calc_ndvi"
         },
-        "ndvi_table_path": {
-            "type": "csv",
-            #"index_col": "suit_factor",
-            #"columns": **SPEC_FUNC_COLS['ndvi_func_type'],
-            "required": "calc_ndvi and ndvi_func_type != 'default'",
-            "allowed": "calc_ndvi and ndvi_func_type != 'default'",
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("ndvi table")
-        },
+        **FUNC_PARAMS['ndvi'],
         'ndvi_dry_raster_path': {
             'type': 'raster',
             'name': 'ndvi dry raster',
@@ -549,14 +559,11 @@ def execute(args):
         'water_velocity', 'urbanization']
     suit_func_to_use = {}
     for suit_key in user_func_paths:
-        table_spec = MODEL_SPEC['args'][f'{suit_key}_table_path']
         func_type = args[f'{suit_key}_func_type']
         if func_type != 'default':
-            table_spec['columns'] = SPEC_FUNC_COLS[func_type]
-            func_params = utils.read_csv_to_dataframe(
-                args[f'{suit_key}_table_path']).to_dict(orient='list')
-            func_params = {
-                key: val[0] for key, val in func_params.items()}
+            func_params = {}
+            for key in SPEC_FUNC_COLS[func_type].keys():
+                func_params[key] = float(args[f'{suit_key}_{func_type}_param_{key}'])
             user_func = FUNC_TYPES[func_type]
         else:
             func_params = None

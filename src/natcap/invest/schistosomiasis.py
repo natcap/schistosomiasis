@@ -963,7 +963,13 @@ def execute(args):
 # raster_map op for geometric mean of habitat suitablity risk layers.
 # `arrays` is expected to be a list of numpy arrays
 def _geometric_mean_op(*arrays):
-    """ """
+    """
+     raster_map op for geometric mean of habitat suitablity risk layers.
+     `arrays` is expected to be a list of numpy arrays
+
+     In practice this function has been slow and I wonder if it'd be
+     more efficient to write our own version of scipy.stats.gmean
+     """
     # Treat 0 values as numpy.nan so can omit them from geometric mean
     #for array in arrays:
     #    array[array==0] = numpy.nan
@@ -1025,7 +1031,7 @@ def _habitat_stability(water_presence_path, months, target_raster_path):
         output = numpy.full(
             array.shape, FLOAT32_NODATA, dtype=numpy.float32)
         valid_pixels = (
-            ~numpy.isclose(array, water_presence_nodata))
+            ~pygeoprocessing.array_equals_nodata(array, water_presence_nodata))
 
         # values with 1 month or less surface water presence set to 0
         lte_one_mask = (array <= 1) & valid_pixels
@@ -1060,7 +1066,8 @@ def _water_temp_op_sm(temp_array, temp_nodata):
     #=IFS(TEMP<16, 0, TEMP<=35, -0.003*(268/(TEMP-14.2)-335)+0.0336538, TEMP>35, 0)
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 or higher than 35 set to 0
     valid_range_mask = (temp_array>=16) & (temp_array<=35)
@@ -1076,7 +1083,8 @@ def _water_temp_op_sh(temp_array, temp_nodata):
     #ShWaterTemp <- function(Temp){ifelse(Temp<17, 0,ifelse(Temp<=33, -0.006 * (295/(Temp - 15.3) - 174) + 0.056, 0))}
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
     valid_range_mask = (temp_array>=17) & (temp_array<=33)
@@ -1092,7 +1100,8 @@ def _water_temp_op_bt(temp_array, temp_nodata):
     #BtruncatusWaterTempNEW <- function(Temp){ifelse(Temp<17, 0,ifelse(Temp<=33, -48.173 + 8.534e+00 * Temp + -5.568e-01 * Temp^2 + 1.599e-02 * Temp^3 + -1.697e-04 * Temp^4, 0))}
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
     valid_range_mask = (temp_array>=17) & (temp_array<=33)
@@ -1111,7 +1120,8 @@ def _water_temp_op_bg(temp_array, temp_nodata):
     #BglabrataWaterTempNEW <- function(Temp){ifelse(Temp<16, 0,ifelse(Temp<=35, -29.9111 + 5.015e+00 * Temp + -3.107e-01 * Temp^2 +8.560e-03 * Temp^3 + -8.769e-05 * Temp^4, 0))}
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
+    nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
     valid_range_mask = (temp_array>=16) & (temp_array<=35)
@@ -1155,7 +1165,7 @@ def _ndvi(ndvi_path, target_raster_path):
     def op(ndvi_array):
         output = numpy.full(
             ndvi_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(ndvi_array, ndvi_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(ndvi_array, ndvi_nodata))
 
         # if temp is less than 0 set to 0
         output[valid_pixels] = (3.33 * ndvi_array[valid_pixels])
@@ -1177,7 +1187,7 @@ def _water_proximity(water_distance_path, target_raster_path):
     def op(water_distance_array):
         output = numpy.full(
             water_distance_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(water_distance_array, water_distance_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(water_distance_array, water_distance_nodata))
 
         # 
         lt_km_mask = valid_pixels & (water_distance_array < 1000)
@@ -1207,7 +1217,7 @@ def _urbanization(pop_density_path, target_raster_path):
     def op(pop_density_array):
         output = numpy.full(
             pop_density_array.shape, BYTE_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(pop_density_array, population_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(pop_density_array, population_nodata))
 
         output[valid_pixels] = (
             1 / (1 + numpy.exp((pop_density_array[valid_pixels] - 3) / 0.4)))
@@ -1227,7 +1237,7 @@ def _rural_population_density(population_path, target_raster_path):
     def op(population_array):
         output = numpy.full(
             population_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(population_array, population_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(population_array, population_nodata))
 
         output[valid_pixels & (population_array < 1)] = population_array[valid_pixels & (population_array < 1)]
         output[valid_pixels & (population_array >= 1)] = 1
@@ -1250,7 +1260,7 @@ def _water_velocity(slope_path, target_raster_path):
             slope_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
         output = numpy.full(
             slope_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = ~numpy.isclose(slope_array, slope_nodata)
+        valid_pixels = ~pygeoprocessing.array_equals_nodata(slope_array, slope_nodata)
 
         # percent slope to degrees
         # https://support.esri.com/en-us/knowledge-base/how-to-convert-the-slope-unit-from-percent-to-degree-in-000022558
@@ -1291,7 +1301,7 @@ def _trapezoid_op(raster_path):
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(raster_array, raster_nodata))
 
         # First plateau
         mask_one = valid_pixels & (raster_array <= xa)
@@ -1326,7 +1336,7 @@ def _gaussian_op(raster_path, target_raster_path, mean=0, std=1, lb=0, ub=40):
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(raster_array, raster_nodata))
 
         output[valid_pixels] = rv.pdf(raster_array[valid_pixels])
         bounds_mask = valid_pixels & (raster_array <= lb) & (raster_array >= ub)
@@ -1349,7 +1359,7 @@ def _sshape_op(
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(raster_array, raster_nodata))
 
         output[valid_pixels] = yin + (yfin - yin) / (1 + numpy.exp(-1 * ((raster_array[valid_pixels]) - xmed) / inv_slope))
 
@@ -1370,7 +1380,7 @@ def _exponential_decay_op(
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(raster_array, raster_nodata))
 
         output[valid_pixels & (raster_array < xmed)] = yin
         exp_mask = valid_pixels & (raster_array >= xmed)
@@ -1394,7 +1404,7 @@ def _linear_op(raster_path, target_raster_path, xa, ya, xz, yz):
     def op(raster_array):
         output = numpy.full(
             raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~numpy.isclose(raster_array, raster_nodata))
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(raster_array, raster_nodata))
 
         # First plateau
         mask_one = valid_pixels & (raster_array <= xa)
@@ -1634,7 +1644,7 @@ def _resample_population_raster(
             density.shape, FLOAT32_NODATA, dtype=numpy.float32)
 
         # We already know that the nodata value is FLOAT32_NODATA
-        valid_mask = ~numpy.isclose(density, FLOAT32_NODATA)
+        valid_mask = ~pygeoprocessing.array_equals_nodata(density, FLOAT32_NODATA)
         out_array[valid_mask] = density[valid_mask] * target_pixel_area
         return out_array
 
@@ -1680,7 +1690,7 @@ def _convert_to_from_density(source_raster_path, target_raster_path,
 
         valid_mask = slice(None)
         if source_nodata is not None:
-            valid_mask = ~numpy.isclose(array, source_nodata)
+            valid_mask = ~pygeoprocessing.array_equals_nodata(array, source_nodata)
 
         if direction == 'to_density':
             out_array[valid_mask] = array[valid_mask] / pixel_area[valid_mask]

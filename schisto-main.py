@@ -28,21 +28,43 @@ _SENEGAL_EPSG = 32628 # WGS 84 / UTM zone 28N
 _SENEGAL_SRS = osr.SpatialReference()
 _SENEGAL_SRS.ImportFromEPSG(_SENEGAL_EPSG)
 
-_TANZANIA_EPSG = 32628 # WGS 84 / UTM zone 28N
+_TANZANIA_EPSG = 21037 # Arc 1960 / UTM zonea 37S 
 _TANZANIA_SRS = osr.SpatialReference()
-_TANZANIA_SRS.ImportFromEPSG(_SENEGAL_EPSG)
+_TANZANIA_SRS.ImportFromEPSG(_TANZANIA_EPSG)
+
+_CIV_EPSG = 2043 # Abidjan 1987 / UTM zone 29N
+_CIV_SRS = osr.SpatialReference()
+_CIV_SRS.ImportFromEPSG(_CIV_EPSG)
+
+LOCATION_MAP = {
+    'sen': {'srs': _SENEGAL_SRS, 'dir_name': 'Senegal', 'epsg': _SENEGAL_EPSG},
+    'civ': {'srs': _CIV_SRS, 'dir_name': 'CIV', 'epsg': _CIV_EPSG},
+    'tza': {'srs': _TANZANIA_SRS, 'dir_name':'Tanzania', 'epsg': _TANZANIA_EPSG},
+    }
 
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
 
-def _gdal_warp(target_path, input_path, xRes=None, yRes=None):
+def define_nodata(raster_path, output_path, nodata_value):
+    """Copies a raster and sets the output nodata value."""
+
+    def _identity_op(array):
+
+        return array
+
+    raster_info = pygeoprocessing.get_raster_info(raster_path)
+    pygeoprocessing.raster_calculator(
+        [(raster_path, 1)], _identity_op, output_path, raster_info['datatype'],
+        nodata_value)
+
+def _gdal_warp(target_path, input_path, dstSRS, xRes=None, yRes=None):
     """Taskgraph wrapper for gdal warp."""
     kwargs={
         'destNameOrDestDS': target_path,
         'srcDSOrSrcDSTab': input_path,
-        'dstSRS': _SENEGAL_SRS,
+        'dstSRS': dstSRS,
         'xRes': xRes,
         'yRes': yRes,
         }
@@ -116,7 +138,7 @@ if __name__ == "__main__":
     key_loc = 'sen'
     input_dir =  os.path.join(
         'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-        'schistosomiasis', 'data', 'Senegal')
+        'schistosomiasis', 'data', LOCATION_MAP[key_loc]['dir_name'])
     input_data = os.path.join(input_dir, 'suitability layers')
     #input_data = os.path.join(
     #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
@@ -139,17 +161,19 @@ if __name__ == "__main__":
     # Project data to Senegal with linear units of meters
     raw_input_data = {}
     raw_input_data['water_temp_dry_raster_path'] = os.path.join(
-        input_data, 'habsuit_waterTemp_dry_2019_{key_loc}.tif')
+        input_data, f'habsuit_waterTemp_dry_2019_{key_loc}.tif')
     raw_input_data['water_temp_wet_raster_path'] = os.path.join(
-        input_data, 'habsuit_waterTemp_wet_2019_{key_loc}.tif')
+        input_data, f'habsuit_waterTemp_wet_2019_{key_loc}.tif')
     raw_input_data['ndvi_dry_raster_path'] = os.path.join(
-        input_data, 'habsuit_NDVI_dry_2019_{key_loc}.tif')
+        input_data, f'habsuit_NDVI_dry_2019_{key_loc}.tif')
     raw_input_data['ndvi_wet_raster_path'] = os.path.join(
-        input_data, 'habsuit_NDVI_wet_2019_{key_loc}.tif')
+        input_data, f'habsuit_NDVI_wet_2019_{key_loc}.tif')
     #raw_input_data['water_presence_path'] = os.path.join(
     #    input_data, 'sen_basin_water_mask.tif')
+    #raw_input_data['water_presence_path'] = os.path.join(
+    #    procured_data, f'basin_water_mask_{key_loc}.tif')
     raw_input_data['water_presence_path'] = os.path.join(
-        procured_data, 'basin_water_mask_{key_loc}.tif')
+        preprocess_dir, f'basin_water_mask_nodata_{key_loc}.tif')
 
     work_token_dir = os.path.join(preprocess_dir, '_taskgraph_working_dir')
     n_workers = -1  # Synchronous execution
@@ -158,20 +182,45 @@ if __name__ == "__main__":
 
     args = {}
     for key, path in raw_input_data.items():
+        # Before warping we need to check that nodata is deined, otherwise
+        # this can leave us with artifacts where data is being created
+        # during warping that is outside the original extents.
+        raster_info = pygeoprocessing.get_raster_info(path)
+        nodata = raster_info['nodata'][0]
+        nodata_path = path
+        nodata_task_list = []
+        if nodata is None:
+            nodata_path = os.path.join(
+                preprocess_dir, f'nodata_{os.path.basename(path)}')
+
+            nodata_task = graph.add_task(
+                define_nodata,
+                kwargs={
+                    'raster_path': path,
+                    'output_path': nodata_path,
+                    'nodata_value': pygeoprocessing.choose_nodata(raster_info['datatype']),
+                },
+                target_path_list=[nodata_path],
+                task_name=f'{key_loc} - Reproject {key} to EPSG:{LOCATION_MAP[key_loc]["epsg"]}'
+            )
+            nodata_task_list.append(nodata_task)
+
         target_projected_path = os.path.join(
-            preprocess_dir, os.path.basename(path))
+            preprocess_dir, f'projected_{os.path.basename(path)}')
         args[key] = target_projected_path
 
         project_task = graph.add_task(
             _gdal_warp,
             kwargs={
                 'target_path': target_projected_path,
-                'input_path': path,
+                'input_path': nodata_path,
+                'dstSRS': LOCATION_MAP[key_loc]['srs'],
                 'xRes': 30,
                 'yRes': 30,
             },
+            dependent_task_list=nodata_task_list,
             target_path_list=[target_projected_path],
-            task_name=f'Reproject {key} to EPSG:{_SENEGAL_EPSG}'
+            task_name=f'{key_loc} - Reproject {key} to EPSG:{LOCATION_MAP[key_loc]["epsg"]}'
         )
 
     # Handle population special case by converting from population count to
@@ -180,8 +229,10 @@ if __name__ == "__main__":
     # What does the value in the LandScan datasets represent?
     #   The value of each cell represents an estimated population count for that cell.
     # LandScan FAQ: https://landscan.ornl.gov/about
+    #population_count_path = os.path.join(
+    #    procured_data, 'sen_pd_2020_1km_UNadj.tif')
     population_count_path = os.path.join(
-        procured_data, 'sen_pd_2020_1km_UNadj.tif')
+        procured_data, f'{key_loc}_pd_2020_1km_UNadj.tif')
     population_density_path = os.path.join(
         preprocess_dir, 'population_density.tif')
     # Population count to population density
@@ -203,10 +254,11 @@ if __name__ == "__main__":
         kwargs={
             'target_path': population_projected_path,
             'input_path': population_density_path,
+            'dstSRS': LOCATION_MAP[key_loc]['srs']
         },
         target_path_list=[population_projected_path],
         dependent_task_list=[population_task],
-        task_name=f'Reproject pop density to EPSG:{_SENEGAL_EPSG}'
+        task_name=f'Reproject pop density to EPSG: {LOCATION_MAP[key_loc]["epsg"]}'
     )
     population_proj_count_path = os.path.join(
         preprocess_dir, 'population_count_projected.tif')
@@ -227,7 +279,7 @@ if __name__ == "__main__":
 
     # Already projected to local projection 32628 via voila web app
     # 30 x 30 resolution (1-arcsecond, 0.000277777777778 degrees)
-    dem_path = os.path.join(procured_data, 'srtm.tiff')
+    dem_path = os.path.join(procured_data, f'srtm-{key_loc}-projected.tiff')
     # For development and testing purposes use an already pit filled DEM
     # Doing this because TaskGraph was NOT reading this task as already
     # completed and was always recalculating, which was slow for development.

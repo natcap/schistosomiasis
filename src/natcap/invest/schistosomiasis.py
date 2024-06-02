@@ -133,6 +133,7 @@ MODEL_SPEC = {
     "ui_spec": {
         "order": [
             ['workspace_dir', 'results_suffix'],
+            ['aoi_vector_path'],
             ["calc_population", "population_func_type",
              "population_table_path", "population_count_path"],
             ["calc_water_distance", "water_distance_func_type",
@@ -153,7 +154,7 @@ MODEL_SPEC = {
     },
     'args_with_spatial_overlap': {
         'spatial_keys': [
-            'population_count_path', 'dem_path',
+            'aoi_vector_path', 'population_count_path', 'dem_path',
             'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
             'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path'],
         'different_projections_ok': True,
@@ -167,6 +168,16 @@ MODEL_SPEC = {
             "about": gettext("Calculate population."),
             "name": gettext("calculate population"),
             "required": False
+        },
+        "aoi_vector_path": {
+            **spec_utils.AOI,
+            "projected": True,
+            "projection_units": u.meter,
+            "about": gettext(
+                "Map of the area(s) of interest over which to run the model "
+                "and aggregate valuation results. Required if Run Valuation "
+                "is selected and the Grid Connection Points table is provided."
+            )
         },
         "population_func_type": {
             **SPEC_FUNC_TYPES,

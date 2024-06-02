@@ -28,6 +28,10 @@ _SENEGAL_EPSG = 32628 # WGS 84 / UTM zone 28N
 _SENEGAL_SRS = osr.SpatialReference()
 _SENEGAL_SRS.ImportFromEPSG(_SENEGAL_EPSG)
 
+_TANZANIA_EPSG = 32628 # WGS 84 / UTM zone 28N
+_TANZANIA_SRS = osr.SpatialReference()
+_TANZANIA_SRS.ImportFromEPSG(_SENEGAL_EPSG)
+
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
@@ -109,35 +113,43 @@ def _convert_to_from_density(source_raster_path, target_raster_path,
 
 
 if __name__ == "__main__":
-    input_data = os.path.join(
+    key_loc = 'sen'
+    input_dir =  os.path.join(
         'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-        'schistosomiasis', 'data', 'suitability layers')
-    procured_data = os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-        'schistosomiasis', 'data', 'procured-data')
-    output_dir = os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-        'schistosomiasis', 'data', 'output_tests_beta')
-    preprocess_dir = os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-        'schistosomiasis', 'data', 'preprocessed')
+        'schistosomiasis', 'data', 'Senegal')
+    input_data = os.path.join(input_dir, 'suitability layers')
+    #input_data = os.path.join(
+    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
+    #    'schistosomiasis', 'data', 'suitability layers')
+    procured_data = os.path.join(input_dir, 'procured-data')
+    #procured_data = os.path.join(
+    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
+    #    'schistosomiasis', 'data', 'procured-data')
+    preprocess_dir = os.path.join(input_dir, 'preprocessed')
+    #preprocess_dir = os.path.join(
+    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
+    #    'schistosomiasis', 'data', 'preprocessed')
+    output_dir = os.path.join(input_dir, 'output_tests_beta')
+    #output_dir = os.path.join(
+    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
+    #    'schistosomiasis', 'data', 'output_tests_beta')
     LOGGER.debug(f'Output dir: {output_dir}')
 
 
     # Project data to Senegal with linear units of meters
     raw_input_data = {}
     raw_input_data['water_temp_dry_raster_path'] = os.path.join(
-        input_data, 'sen_habsuit_waterTemp_dry_2019.tif')
+        input_data, 'habsuit_waterTemp_dry_2019_{key_loc}.tif')
     raw_input_data['water_temp_wet_raster_path'] = os.path.join(
-        input_data, 'sen_habsuit_waterTemp_wet_2019.tif')
+        input_data, 'habsuit_waterTemp_wet_2019_{key_loc}.tif')
     raw_input_data['ndvi_dry_raster_path'] = os.path.join(
-        input_data, 'sen_habsuit_NDVI_dry_2019.tif')
+        input_data, 'habsuit_NDVI_dry_2019_{key_loc}.tif')
     raw_input_data['ndvi_wet_raster_path'] = os.path.join(
-        input_data, 'sen_habsuit_NDVI_wet_2019.tif')
+        input_data, 'habsuit_NDVI_wet_2019_{key_loc}.tif')
     #raw_input_data['water_presence_path'] = os.path.join(
     #    input_data, 'sen_basin_water_mask.tif')
     raw_input_data['water_presence_path'] = os.path.join(
-        procured_data, 'sen_basin_water_mask_nodata.tif')
+        procured_data, 'basin_water_mask_{key_loc}.tif')
 
     work_token_dir = os.path.join(preprocess_dir, '_taskgraph_working_dir')
     n_workers = -1  # Synchronous execution

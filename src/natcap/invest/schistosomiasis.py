@@ -427,12 +427,13 @@ _OUTPUT_BASE_FILES = {
     'water_proximity_suit': 'water_proximity_suit.tif',
     'rural_pop_suit': 'rural_pop_suit.tif',
     'urbanization_suit': 'urbanization_suit.tif',
-    #'water_stability_suit': 'water_stability_suit.tif',
+    'rural_urbanization_suit': 'rural_urbanization_suit.tif',
+    'water_stability_suit': 'water_stability_suit.tif',
     'habitat_suit_geometric_mean': 'habitat_suit_geometric_mean.tif',
 }
 
 _INTERMEDIATE_BASE_FILES = {
-    'aligned_population': 'aligned_population.tif',
+    'aligned_pop_count': 'aligned_population_count.tif',
     'aligned_pop_density': 'aligned_pop_density.tif',
     'masked_population': 'masked_population.tif',
     'population_density': 'population_density.tif',
@@ -627,6 +628,9 @@ def execute(args):
         file_registry['aligned_ndvi_wet'],
         file_registry['aligned_dem']]
 
+    vector_mask_options = {
+        'mask_vector_path': args['watersheds_path'],
+    }
     align_task = graph.add_task(
         pygeoprocessing.align_and_resize_raster_stack,
         kwargs={
@@ -635,6 +639,7 @@ def execute(args):
             'resample_method_list': ['near']*len(raster_input_list),
             'target_pixel_size': squared_default_pixel_size,
             'bounding_box_mode': 'intersection',
+            'vector_mask_options': vector_mask_options,
         },
         target_path_list=aligned_input_list,
         task_name='Align and resize input rasters'
@@ -648,19 +653,19 @@ def execute(args):
     default_pixel_size = raster_info['pixel_size']
 
     # NOTE: Need to handle population differently in case of scaling
-    # Returns population count
+    # Returns population count aligned to other inputs
     population_align_task = graph.add_task(
         _resample_population_raster,
         kwargs={
             'source_population_raster_path': args['population_count_path'],
-            'target_population_raster_path': file_registry['aligned_population'],
-            'target_density_aligned_raster_path': file_registry['aligned_pop_density'],
+            'target_pop_count_raster_path': file_registry['aligned_pop_count'],
+            'target_pop_density_raster_path': file_registry['aligned_pop_density'],
             'lulc_pixel_size': squared_default_pixel_size,
             'lulc_bb': default_bb,
             'lulc_projection_wkt': default_wkt,
             'working_dir': intermediate_dir,
         },
-        target_path_list=[file_registry['aligned_population']],
+        target_path_list=[file_registry['aligned_pop_count'], file_registry['aligned_pop_density']],
         task_name='Align and resize population'
     )
 
@@ -674,18 +679,18 @@ def execute(args):
         "schistosomiasis", "data", "water-temp-wet-colors.txt")
     
     ### Habitat stability
-#    habitat_stability_task = graph.add_task(
-#        _habitat_stability,
-#        kwargs={
-#            'surface_water_presence': args['surface_water_presence'],
-#            'months': 1.75,
-#            'target_raster_path': file_registry['habitat_stability'],
-#        },
-#        target_path_list=[file_registry['aligned_population']],
-#        task_name='Resample population to LULC resolution')
-    #suitability_tasks.append(habitat_suitability_task)
-        #habitat_suit_risk_paths.append(file_registry['habitat_stability'])
-    #outputs_to_tile.append((file_registry['habitat_suitability'], default_color_path))
+    habitat_stability_task = graph.add_task(
+        _habitat_stability,
+        kwargs={
+            'surface_water_presence': args['surface_water_presence'],
+            'months': 1.75,
+            'target_raster_path': file_registry['habitat_stability'],
+        },
+        target_path_list=[file_registry['habitat_stability']],
+        task_name='habitat stability')
+    suitability_tasks.append(habitat_suitability_task)
+    habitat_suit_risk_paths.append(file_registry['habitat_stability'])
+    outputs_to_tile.append((file_registry['habitat_suitability'], default_color_path))
 
 
     ### Water velocity
@@ -734,7 +739,6 @@ def execute(args):
         task_name='distance edt')
 
     water_proximity_task = graph.add_task(
-        #_water_proximity,
         suit_func_to_use['water_distance']['func_name'],
         args=(file_registry['distance'], file_registry['water_proximity_suit']),
         kwargs=suit_func_to_use['water_distance']['func_params'],
@@ -746,20 +750,10 @@ def execute(args):
 
     ### Rural population density and urbanization
     # Population count to density in hectares
-#    pop_hectare_task = graph.add_task(
-#        func=_pop_count_to_density,
-#        kwargs={
-#            'pop_count_path': file_registry['aligned_population'],
-#            'target_path': file_registry['population_hectares'],
-#        },
-#        target_path_list=[file_registry['population_hectares']],
-#        dependent_task_list=[population_align_task],
-#        task_name=f'Population count to density in hectares.')
-    
     pop_hectare_task = graph.add_task(
-        func=_pop_density_to_hectares,
+        func=_pop_count_to_density,
         kwargs={
-            'pop_density_path': file_registry['aligned_pop_density'],
+            'pop_count_path': file_registry['aligned_pop_count'],
             'target_path': file_registry['population_hectares'],
         },
         target_path_list=[file_registry['population_hectares']],
@@ -767,7 +761,6 @@ def execute(args):
         task_name=f'Population count to density in hectares.')
 
     rural_pop_task = graph.add_task(
-        #_rural_population_density,
         suit_func_to_use['population']['func_name'],
         args=(
             file_registry['population_hectares'],
@@ -790,6 +783,20 @@ def execute(args):
         task_name=f'Urbanization Suit')
     suitability_tasks.append(urbanization_task)
     outputs_to_tile.append((file_registry[f'urbanization_suit'], default_color_path))
+    
+    rural_urbanization_task = graph.add_task(
+        _rural_urbanization_combined,
+        args=(
+            file_registry['population_hectares'],
+            file_registry['rural_pop_suit'],
+            file_registry['urbanization_suit'],
+            file_registry['rural_urbanization_suit'],
+            ),
+        dependent_task_list=[rural_pop_task, urbanization_task],
+        target_path_list=[file_registry['rural_urbanization_suit']],
+        task_name=f'Rural Urbanization Suit')
+    #suitability_tasks.append(rural_urbanization_task)
+    outputs_to_tile.append((file_registry[f'rural_urbanization_suit'], default_color_path))
 
     for season in ["dry", "wet"]:
         ### Water temperature
@@ -879,7 +886,10 @@ def execute(args):
 
 
     ### Convolve habitat suit geometric mean over land
-    decay_dist_m = 2000
+    # TODO: add this to be an input to the model
+    # TODO: mask out water bodies to nodata and not include in risk
+    #decay_dist_m = 2000
+    decay_dist_m = 15 * 1000
     kernel_path = os.path.join(
         intermediate_dir, f'kernel{suffix}.tif')
     max_dist_pixels = abs(
@@ -917,6 +927,20 @@ def execute(args):
         task_name=f'Convolve hab risk - {decay_dist_m}m',
         target_path_list=[convolved_hab_risk_path],
         dependent_task_list=[kernel_task, geometric_mean_task])
+    
+    masked_convolved_path = os.path.join(
+        intermediate_dir,
+        f'masked_hab_risk_within_{decay_dist_m}{suffix}.tif')
+    mask_convolve_task = graph.add_task(
+        _nodata_mask_op,
+        kwargs={
+            'input_path': convolved_hab_risk_path,
+            'mask_path': file_registry['aligned_water_presence'],
+            'target_path': masked_convolved_path,
+        },
+        task_name=f'Mask convolve hab risk - {decay_dist_m}m',
+        target_path_list=[masked_convolved_path],
+        dependent_task_list=[convolved_hab_risk_task])
 
     ### Weight convolved risk by urbanization
     risk_to_pop_path = os.path.join(
@@ -924,28 +948,37 @@ def execute(args):
     risk_to_pop_task = graph.add_task(
         func=pygeoprocessing.raster_map,
         kwargs={
-            'op': _multiply_op,
-            'rasters': [convolved_hab_risk_path, file_registry['urbanization_suit']],
+            'op': _multipy_op,
+            'rasters': [file_registry['rural_urbanization_suit'], convolved_hab_risk_path],
             'target_path': risk_to_pop_path,
             'target_nodata': FLOAT32_NODATA,
             },
         target_path_list=[risk_to_pop_path],
         dependent_task_list=[convolved_hab_risk_task, urbanization_task],
         task_name='risk to population')
+    outputs_to_tile.append((risk_to_pop_path, default_color_path))
+
+    # water habitat suitability gets at the risk of maximum potential schisto exposure
+    # schisto exposure x urbanization gets at the risk of likelihood of exposure given socioeconomic factors
+    # final risk, is population. Where are there the most people at the highest risk.
 
     ### Multiply risk_to_pop by people count?
-#    risk_to_pop_count_path = os.path.join(
-#        output_dir, f'risk_to_pop_count{suffix}.tif')
-#    risk_to_pop_count_task = graph.add_task(
-#        func=pygeoprocessing.raster_map,
-#        kwargs={
-#            'op': _multiply_op,
-#            'rasters': [risk_to_pop_path, population_count_path],
-#            'target_path': risk_to_pop_count_path,
-#            'target_nodata': FLOAT32_NODATA,
-#        target_path_list=[risk_to_pop_count_path],
-#        dependent_task_list=[risk_to_pop_task],
-#        task_name='risk to pop_count')
+    # Want to get to how many people are at risk
+    # Multiply by count or by density
+    # TODO: raw and scaled outputs for convolved risk, urbanization x raw convolved, and risk to people
+    risk_to_pop_count_path = os.path.join(
+        output_dir, f'risk_to_pop_count{suffix}.tif')
+    risk_to_pop_count_task = graph.add_task(
+        func=pygeoprocessing.raster_map,
+        kwargs={
+            'op': _multiply_op,
+            'rasters': [risk_to_pop_path, population_count_path],
+            'target_path': risk_to_pop_count_path,
+            'target_nodata': FLOAT32_NODATA,
+        target_path_list=[risk_to_pop_count_path],
+        dependent_task_list=[risk_to_pop_task],
+        task_name='risk to pop_count')
+    outputs_to_tile.append((risk_to_pop_count_path, default_color_path))
 
     graph.close()
     graph.join()
@@ -986,6 +1019,31 @@ def _geometric_mean_op(*arrays):
     #result[nan_mask] = BYTE_NODATA
     #return result
     return gmean(arrays, axis=0)
+
+def _rural_urbanization_combined(pop_density_path, rural_path, urbanization_path):
+    """Combine the rural and urbanization functions."""
+    rural_info = pygeoprocessing.get_raster_info(rural_path)
+    rural_nodata = rural_info['nodata'][0]
+    urbanization_info = pygeoprocessing.get_raster_info(urbanization_path)
+    urbanization_nodata = urbanization_info['nodata'][0]
+
+    def _rural_urbnization_op(pop_density_array, rural_array, urbanization_array):
+        output = numpy.full(
+            rural_array.shape, BYTE_NODATA, dtype=numpy.float32)
+        nodata_mask = (
+                pygeoprocessing.array_equals_nodata(rural_array, rural_nodata) |
+                pygeoprocessing.array_equals_nodata(urbanization_array, urbanization_nodata) )
+
+        use_rural_mask = pop_density_array <= 1
+        output[use_rural_mask] = rural_array[use_rural_mask]
+        output[~use_rural_mask] = urbanization_array[~use_rural_mask]
+        output[nodata_mask] = BYTE_NODATA
+
+        return output
+    
+    pygeoprocessing.raster_calculator(
+        [(pop_density_path, 1), (rural_path, 1), (urbanization_path, 1)],
+        _rural_urbanization_op, target_raster_path, gdal.GDT_Float32, BYTE_NODATA)
 
 def _multiply_op(array_one, array_two): return numpy.multiply(array_one, array_two)
 
@@ -1539,8 +1597,8 @@ def _square_off_pixels(raster_path):
 
 
 def _resample_population_raster(
-        source_population_raster_path, target_population_raster_path,
-        target_density_aligned_raster_path,
+        source_population_raster_path, target_pop_count_raster_path,
+        target_pop_density_raster_path,
         lulc_pixel_size, lulc_bb, lulc_projection_wkt, working_dir):
     """Resample a population raster without losing or gaining people.
 
@@ -1615,11 +1673,10 @@ def _resample_population_raster(
         density_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
 
     # Step 2: align to the LULC
-    warped_density_path = os.path.join(tmp_working_dir, 'warped_density.tif')
     pygeoprocessing.warp_raster(
         density_raster_path,
         target_pixel_size=lulc_pixel_size,
-        target_raster_path=target_density_aligned_raster_path,
+        target_raster_path=target_pop_density_raster_path,
         resample_method='bilinear',
         target_bb=lulc_bb,
         target_projection_wkt=lulc_projection_wkt)
@@ -1656,11 +1713,11 @@ def _resample_population_raster(
         return out_array
 
     pygeoprocessing.raster_calculator(
-        [(target_density_aligned_raster_path, 1)],
+        [(target_pop_density_raster_path, 1)],
         _convert_density_to_population,
-        target_population_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
+        target_pop_count_raster_path, gdal.GDT_Float32, FLOAT32_NODATA)
 
-    #shutil.rmtree(tmp_working_dir, ignore_errors=True)
+    shutil.rmtree(tmp_working_dir, ignore_errors=True)
 
 def _convert_to_from_density(source_raster_path, target_raster_path,
         direction='to_density'):
@@ -1717,7 +1774,8 @@ def _pop_count_to_density(pop_count_path, target_path):
     pop_pixel_area = abs(numpy.multiply(*population_raster_info['pixel_size']))
 
     kwargs={
-        'op': lambda x: (x/pop_pixel_area)*10000,  # convert count per pixel to meters sq to hectares
+        #'op': lambda x: (x/pop_pixel_area)*10000,  # convert count per pixel to meters sq to hectares
+        'op': lambda x: (x / pop_pixel_area) / 10000,  # convert count per pixel to meters sq to hectares
         'rasters': [pop_count_path],
         'target_path': target_path,
         'target_nodata': -1,
@@ -1730,7 +1788,7 @@ def _pop_density_to_hectares(pop_density_path, target_path):
     population_raster_info = pygeoprocessing.get_raster_info(pop_density_path)
 
     kwargs={
-        'op': lambda x: x/100,  # convert count per pixel to meters sq to hectares
+        'op': lambda x: x/100,
         'rasters': [pop_density_path],
         'target_path': target_path,
         'target_nodata': -1,
@@ -1784,6 +1842,7 @@ def _convolve_and_set_lower_bound(
         kernel_path_band=kernel_path_band,
         target_path=target_path,
         working_dir=working_dir,
+        #mask_nodata=True,
         mask_nodata=False,
         #normalize_kernel=True
         )

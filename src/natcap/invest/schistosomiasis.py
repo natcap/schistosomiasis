@@ -428,7 +428,8 @@ _OUTPUT_BASE_FILES = {
     'rural_pop_suit': 'rural_pop_suit.tif',
     'urbanization_suit': 'urbanization_suit.tif',
     'rural_urbanization_suit': 'rural_urbanization_suit.tif',
-    'water_stability_suit': 'water_stability_suit.tif',
+    #'water_stability_suit': 'water_stability_suit.tif',
+    'habitat_stability_suit': 'habitat_stability_suit.tif',
     'habitat_suit_geometric_mean': 'habitat_suit_geometric_mean.tif',
 }
 
@@ -628,18 +629,15 @@ def execute(args):
         file_registry['aligned_ndvi_wet'],
         file_registry['aligned_dem']]
 
-    vector_mask_options = {
-        'mask_vector_path': args['watersheds_path'],
-    }
     align_task = graph.add_task(
         pygeoprocessing.align_and_resize_raster_stack,
         kwargs={
             'base_raster_path_list': raster_input_list,
+            'base_vector_path_list': [args['aoi_vector_path']],
             'target_raster_path_list': aligned_input_list,
             'resample_method_list': ['near']*len(raster_input_list),
             'target_pixel_size': squared_default_pixel_size,
             'bounding_box_mode': 'intersection',
-            'vector_mask_options': vector_mask_options,
         },
         target_path_list=aligned_input_list,
         task_name='Align and resize input rasters'
@@ -679,18 +677,20 @@ def execute(args):
         "schistosomiasis", "data", "water-temp-wet-colors.txt")
     
     ### Habitat stability
-    habitat_stability_task = graph.add_task(
-        _habitat_stability,
-        kwargs={
-            'surface_water_presence': args['surface_water_presence'],
-            'months': 1.75,
-            'target_raster_path': file_registry['habitat_stability'],
-        },
-        target_path_list=[file_registry['habitat_stability']],
-        task_name='habitat stability')
-    suitability_tasks.append(habitat_suitability_task)
-    habitat_suit_risk_paths.append(file_registry['habitat_stability'])
-    outputs_to_tile.append((file_registry['habitat_suitability'], default_color_path))
+    # NOTE: not currently calculating this because we don't have the data.
+    # we are just using a binary water presence raster input
+#    habitat_stability_task = graph.add_task(
+#        _habitat_stability,
+#        kwargs={
+#            'water_presence_path': file_registry['aligned_water_presence'],
+#            'months': 1.75,
+#            'target_raster_path': file_registry['habitat_stability_suit'],
+#        },
+#        target_path_list=[file_registry['habitat_stability_suit']],
+#        task_name='habitat stability')
+#    suitability_tasks.append(habitat_stability_task)
+#    habitat_suit_risk_paths.append(file_registry['habitat_stability_suit'])
+#    outputs_to_tile.append((file_registry['habitat_stability_suit'], default_color_path))
 
 
     ### Water velocity
@@ -725,7 +725,7 @@ def execute(args):
         task_name=f'Water Velocity Suit')
     suitability_tasks.append(water_vel_task)
     habitat_suit_risk_paths.append(file_registry['water_velocity_suit'])
-    outputs_to_tile.append((file_registry['water_velocity_suit'], default_color_path))
+    #outputs_to_tile.append((file_registry['water_velocity_suit'], default_color_path))
 
     ### Proximity to water in meters
     dist_edt_task = graph.add_task(
@@ -746,7 +746,7 @@ def execute(args):
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
     suitability_tasks.append(water_proximity_task)
-    outputs_to_tile.append((file_registry[f'water_proximity_suit'], default_color_path))
+    #outputs_to_tile.append((file_registry[f'water_proximity_suit'], default_color_path))
 
     ### Rural population density and urbanization
     # Population count to density in hectares
@@ -770,7 +770,7 @@ def execute(args):
         target_path_list=[file_registry['rural_pop_suit']],
         task_name=f'Rural Population Suit')
     suitability_tasks.append(rural_pop_task)
-    outputs_to_tile.append((file_registry[f'rural_pop_suit'], default_color_path))
+    #outputs_to_tile.append((file_registry[f'rural_pop_suit'], default_color_path))
     
     urbanization_task = graph.add_task(
         suit_func_to_use['urbanization']['func_name'],
@@ -782,7 +782,7 @@ def execute(args):
         target_path_list=[file_registry['urbanization_suit']],
         task_name=f'Urbanization Suit')
     suitability_tasks.append(urbanization_task)
-    outputs_to_tile.append((file_registry[f'urbanization_suit'], default_color_path))
+    #outputs_to_tile.append((file_registry[f'urbanization_suit'], default_color_path))
     
     rural_urbanization_task = graph.add_task(
         _rural_urbanization_combined,
@@ -842,7 +842,7 @@ def execute(args):
             kwargs=suit_func_to_use['ndvi']['func_params'],
             dependent_task_list=[align_task],
             target_path_list=[file_registry[f'ndvi_suit_{season}']],
-            task_name=f'NDVI Suit for {season} SM')
+            task_name=f'NDVI Suit for {season}')
         suitability_tasks.append(ndvi_task)
         habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
         outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
@@ -883,13 +883,14 @@ def execute(args):
         target_path_list=[file_registry['habitat_suit_geometric_mean']],
         dependent_task_list=suitability_tasks,
         task_name='geometric mean')
+    outputs_to_tile.append((file_registry[f'habitat_suit_geometric_mean'], default_color_path))
 
 
     ### Convolve habitat suit geometric mean over land
     # TODO: add this to be an input to the model
     # TODO: mask out water bodies to nodata and not include in risk
-    #decay_dist_m = 2000
-    decay_dist_m = 15 * 1000
+    decay_dist_m = 5000
+    #decay_dist_m = 15 * 1000
     kernel_path = os.path.join(
         intermediate_dir, f'kernel{suffix}.tif')
     max_dist_pixels = abs(
@@ -932,7 +933,7 @@ def execute(args):
         intermediate_dir,
         f'masked_hab_risk_within_{decay_dist_m}{suffix}.tif')
     mask_convolve_task = graph.add_task(
-        _nodata_mask_op,
+        _water_mask_op,
         kwargs={
             'input_path': convolved_hab_risk_path,
             'mask_path': file_registry['aligned_water_presence'],
@@ -948,13 +949,13 @@ def execute(args):
     risk_to_pop_task = graph.add_task(
         func=pygeoprocessing.raster_map,
         kwargs={
-            'op': _multipy_op,
-            'rasters': [file_registry['rural_urbanization_suit'], convolved_hab_risk_path],
+            'op': _multiply_op,
+            'rasters': [file_registry['rural_urbanization_suit'], masked_convolved_path],
             'target_path': risk_to_pop_path,
-            'target_nodata': FLOAT32_NODATA,
+            #'target_nodata': FLOAT32_NODATA,
             },
         target_path_list=[risk_to_pop_path],
-        dependent_task_list=[convolved_hab_risk_task, urbanization_task],
+        dependent_task_list=[mask_convolve_task, urbanization_task],
         task_name='risk to population')
     outputs_to_tile.append((risk_to_pop_path, default_color_path))
 
@@ -972,9 +973,10 @@ def execute(args):
         func=pygeoprocessing.raster_map,
         kwargs={
             'op': _multiply_op,
-            'rasters': [risk_to_pop_path, population_count_path],
+            'rasters': [risk_to_pop_path, file_registry['aligned_pop_count']],
             'target_path': risk_to_pop_count_path,
-            'target_nodata': FLOAT32_NODATA,
+            #'target_nodata': FLOAT32_NODATA,
+            },
         target_path_list=[risk_to_pop_count_path],
         dependent_task_list=[risk_to_pop_task],
         task_name='risk to pop_count')
@@ -993,12 +995,35 @@ def execute(args):
     #    task_name=f'Tile temperature',
     #    dependent_task_list=suitability_tasks)
     for raster_path, color_path in outputs_to_tile:
-        #_tile_raster(raster_path, color_path)
-        continue 
+        _tile_raster(raster_path, color_path)
+        #continue 
 
 
     LOGGER.info("Model completed")
 
+
+def _water_mask_op(input_path, mask_path, target_path):
+    """
+    """
+    input_info = pygeoprocessing.get_raster_info(input_path)
+    input_nodata = input_info['nodata'][0]
+    mask_info = pygeoprocessing.get_raster_info(mask_path)
+    mask_nodata = mask_info['nodata'][0]
+
+    def _mask_op(input_array, mask_array):
+        output = numpy.full(
+            input_array.shape, input_nodata, dtype=numpy.float32)
+        nodata_mask = pygeoprocessing.array_equals_nodata(input_array, input_nodata)
+
+        mask = mask_array == 1
+        output[mask] = input_nodata
+        output[nodata_mask] = input_nodata
+
+        return output
+    
+    pygeoprocessing.raster_calculator(
+        [(input_path, 1), (mask_path, 1)],
+        _mask_op, target_path, gdal.GDT_Float32, input_nodata)
 
 # raster_map op for geometric mean of habitat suitablity risk layers.
 # `arrays` is expected to be a list of numpy arrays
@@ -1020,14 +1045,14 @@ def _geometric_mean_op(*arrays):
     #return result
     return gmean(arrays, axis=0)
 
-def _rural_urbanization_combined(pop_density_path, rural_path, urbanization_path):
+def _rural_urbanization_combined(pop_density_path, rural_path, urbanization_path, target_raster_path):
     """Combine the rural and urbanization functions."""
     rural_info = pygeoprocessing.get_raster_info(rural_path)
     rural_nodata = rural_info['nodata'][0]
     urbanization_info = pygeoprocessing.get_raster_info(urbanization_path)
     urbanization_nodata = urbanization_info['nodata'][0]
 
-    def _rural_urbnization_op(pop_density_array, rural_array, urbanization_array):
+    def _rural_urbanization_op(pop_density_array, rural_array, urbanization_array):
         output = numpy.full(
             rural_array.shape, BYTE_NODATA, dtype=numpy.float32)
         nodata_mask = (
@@ -1057,9 +1082,9 @@ def _tile_raster(raster_path, color_relief_path):
 
     if not os.path.isdir(tile_dir):
         os.mkdir(tile_dir)
-    gdaldem_cmd = f'gdaldem color-relief -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
+    gdaldem_cmd = f'gdaldem color-relief -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
     subprocess.call(gdaldem_cmd, shell=True)
-    tile_cmd = f'gdal2tiles --xyz -r near -e --zoom=1-13 --process=4 {rgb_raster_path} {tile_dir}'
+    tile_cmd = f'gdal2tiles --xyz -r near -e --zoom=1-10 --process=4 {rgb_raster_path} {tile_dir}'
     print(tile_cmd)
     subprocess.call(tile_cmd, shell=True)
 
@@ -1189,13 +1214,13 @@ def _water_temp_op_bg(temp_array, temp_nodata):
     nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
-    valid_range_mask = (temp_array>=16) & (temp_array<=35)
+    valid_range_mask = (temp_array>=16) & (temp_array<=35) & (~nodata_pixels)
     output[valid_range_mask] = (
         -29.9111 + (5.015 * temp_array[valid_range_mask]) + 
         (-3.107e-01 * numpy.power(temp_array[valid_range_mask], 2)) +
         (8.560e-03 * numpy.power(temp_array[valid_range_mask], 3)) +
         (-8.769e-05 * numpy.power(temp_array[valid_range_mask], 4)))
-    output[~valid_range_mask] = 0
+    output[~valid_range_mask & ~nodata_pixels] = 0
     output[nodata_pixels] = BYTE_NODATA
 
     return output
@@ -1229,20 +1254,21 @@ def _ndvi(ndvi_path, target_raster_path):
     ndvi_nodata = ndvi_info['nodata'][0]
     def op(ndvi_array):
         output = numpy.full(
-            ndvi_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
+            ndvi_array.shape, BYTE_NODATA, dtype=numpy.float32)
         valid_pixels = (~pygeoprocessing.array_equals_nodata(ndvi_array, ndvi_nodata))
 
         # if temp is less than 0 set to 0
-        output[valid_pixels] = (3.33 * ndvi_array[valid_pixels])
+        mask = valid_pixels & (ndvi_array>=0) & (ndvi_array<=0.3)
+        output[mask] = (3.33 * ndvi_array[mask])
         output[valid_pixels & (ndvi_array < 0)] = 0
         output[valid_pixels & (ndvi_array > 0.3)] = 1
-        output[~valid_pixels] = FLOAT32_NODATA
+        output[~valid_pixels] = BYTE_NODATA
 
         return output
 
     pygeoprocessing.raster_calculator(
         [(ndvi_path, 1)], op, target_raster_path, gdal.GDT_Float32,
-        FLOAT32_NODATA)
+        BYTE_NODATA)
 
 def _water_proximity(water_distance_path, target_raster_path):
     """ """
@@ -1686,8 +1712,8 @@ def _resample_population_raster(
     target_srs = osr.SpatialReference()
     target_srs.ImportFromWkt(lulc_projection_wkt)
     # Calculate target pixel area in km to match above
-    target_pixel_area = (
-        numpy.multiply(*lulc_pixel_size) * target_srs.GetLinearUnits()) / 1e6
+    target_pixel_area = abs((
+        numpy.multiply(*lulc_pixel_size) * target_srs.GetLinearUnits()) / 1e6)
 
     def _convert_density_to_population(density):
         """Convert a population density raster back to population counts.
@@ -1844,7 +1870,7 @@ def _convolve_and_set_lower_bound(
         working_dir=working_dir,
         #mask_nodata=True,
         mask_nodata=False,
-        #normalize_kernel=True
+        normalize_kernel=True
         )
 
     # Sometimes there are negative values that should have been clamped to 0 in

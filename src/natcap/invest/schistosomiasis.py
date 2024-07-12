@@ -1156,14 +1156,14 @@ def _water_temp_op_sm(temp_array, temp_nodata):
     #=IFS(TEMP<16, 0, TEMP<=35, -0.003*(268/(TEMP-14.2)-335)+0.0336538, TEMP>35, 0)
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
     nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 or higher than 35 set to 0
-    valid_range_mask = (temp_array>=16) & (temp_array<=35)
+    valid_range_mask = (temp_array>=16) & (temp_array<=35) & ~nodata_pixels
     output[valid_range_mask] = (
         -0.003 * (268 / (temp_array[valid_range_mask] - 14.2) - 335) + 0.0336538)
-    output[~valid_range_mask] = 0
+    output[~nodata_pixels & (temp_array < 16)] = 0
+    output[~nodata_pixels & (temp_array > 35)] = 0
     output[nodata_pixels] = BYTE_NODATA
 
     return output
@@ -1173,14 +1173,14 @@ def _water_temp_op_sh(temp_array, temp_nodata):
     #ShWaterTemp <- function(Temp){ifelse(Temp<17, 0,ifelse(Temp<=33, -0.006 * (295/(Temp - 15.3) - 174) + 0.056, 0))}
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
     nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
-    valid_range_mask = (temp_array>=17) & (temp_array<=33)
+    valid_range_mask = (temp_array>=17) & (temp_array<=33) & ~nodata_pixels
     output[valid_range_mask] = (
         -0.006 * (295 / (temp_array[valid_range_mask] - 15.3) - 174) + 0.056)
-    output[~valid_range_mask] = 0
+    output[~nodata_pixels & (temp_array < 17)] = 0
+    output[~nodata_pixels & (temp_array > 33)] = 0
     output[nodata_pixels] = BYTE_NODATA
 
     return output
@@ -1190,17 +1190,17 @@ def _water_temp_op_bt(temp_array, temp_nodata):
     #BtruncatusWaterTempNEW <- function(Temp){ifelse(Temp<17, 0,ifelse(Temp<=33, -48.173 + 8.534e+00 * Temp + -5.568e-01 * Temp^2 + 1.599e-02 * Temp^3 + -1.697e-04 * Temp^4, 0))}
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
     nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
-    valid_range_mask = (temp_array>=17) & (temp_array<=33)
+    valid_range_mask = (temp_array>=17) & (temp_array<=33) & ~nodata_pixels
     output[valid_range_mask] = (
         -48.173 + (8.534 * temp_array[valid_range_mask]) + 
         (-5.568e-01 * numpy.power(temp_array[valid_range_mask], 2)) +
         (1.599e-02 * numpy.power(temp_array[valid_range_mask], 3)) +
         (-1.697e-04 * numpy.power(temp_array[valid_range_mask], 4)))
-    output[~valid_range_mask] = 0
+    output[~nodata_pixels & (temp_array < 17)] = 0
+    output[~nodata_pixels & (temp_array > 33)] = 0
     output[nodata_pixels] = BYTE_NODATA
 
     return output
@@ -1210,21 +1210,20 @@ def _water_temp_op_bg(temp_array, temp_nodata):
     #BglabrataWaterTempNEW <- function(Temp){ifelse(Temp<16, 0,ifelse(Temp<=35, -29.9111 + 5.015e+00 * Temp + -3.107e-01 * Temp^2 +8.560e-03 * Temp^3 + -8.769e-05 * Temp^4, 0))}
     output = numpy.full(
         temp_array.shape, BYTE_NODATA, dtype=numpy.float32)
-    #nodata_pixels = (numpy.isclose(temp_array, temp_nodata))
     nodata_pixels = pygeoprocessing.array_equals_nodata(temp_array, temp_nodata)
 
     # if temp is less than 16 set to 0
-    valid_range_mask = (temp_array>=16) & (temp_array<=35) & (~nodata_pixels)
+    valid_range_mask = (temp_array>=16) & (temp_array<=35) & ~nodata_pixels
     output[valid_range_mask] = (
         -29.9111 + (5.015 * temp_array[valid_range_mask]) + 
         (-3.107e-01 * numpy.power(temp_array[valid_range_mask], 2)) +
         (8.560e-03 * numpy.power(temp_array[valid_range_mask], 3)) +
         (-8.769e-05 * numpy.power(temp_array[valid_range_mask], 4)))
-    output[~valid_range_mask & ~nodata_pixels] = 0
+    output[~nodata_pixels & (temp_array < 16)] = 0
+    output[~nodata_pixels & (temp_array > 35)] = 0
     output[nodata_pixels] = BYTE_NODATA
 
     return output
-
 
 def _water_temp_suit(water_temp_path, target_raster_path, op_key):
     """

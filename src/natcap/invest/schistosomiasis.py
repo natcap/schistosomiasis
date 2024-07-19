@@ -131,17 +131,17 @@ FUNC_PARAMS = {
         f'population_{fn}_param_{key}': {
             **spec,
             'name': f'{key}',
-            "required": f"calc_population and population_func_type == '{fn}'",
-            "allowed": f"calc_population and population_func_type == '{fn}'",
+            "required": f"population_func_type == '{fn}'",
+            "allowed": f"population_func_type == '{fn}'",
         }
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     },
-    'water_distance': {
-        f'water_distance_{fn}_param_{key}': {
+    'water_proximity': {
+        f'water_proximity_{fn}_param_{key}': {
             **spec,
             'name': f'{key}',
-            "required": f"calc_water_distance and water_distance_func_type == '{fn}'",
-            "allowed": f"calc_water_distance and water_distance_func_type == '{fn}'",
+            "required": f"calc_water_proximity and water_proximity_func_type == '{fn}'",
+            "allowed": f"calc_water_proximity and water_proximity_func_type == '{fn}'",
         }
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     },
@@ -174,6 +174,19 @@ FUNC_PARAMS = {
     }
 }
 
+def user_input_id(input_id):
+    return {
+        f'user_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_user_{input_id} and user_func_type_{input_id} == '{fn}'",
+            "allowed": f"calc_user_{input_id} and user_func_type_{input_id} == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    }
+
+FUNC_PARAMS_USER = user_input_id
+
 MODEL_SPEC = {
     'model_id': 'schistosomiasis',
     'model_name': gettext(SCHISTO),
@@ -184,22 +197,28 @@ MODEL_SPEC = {
         "order": [
             ['workspace_dir', 'results_suffix'],
             ['aoi_vector_path'],
-            ["calc_population", "population_func_type",
-             "population_count_path",
+            ['decay_distance'],
+            [f'include_{x}' for x in ['bg', 'bt', 'sh', 'sm']],
+            ["water_presence_path"],
+            ["population_count_path", "population_func_type",
              {"Population parameters": list(FUNC_PARAMS['population'].keys())}],
-            ["calc_water_distance", "water_distance_func_type",
-             "water_presence_path",
-             {"Water distance parameters": list(FUNC_PARAMS['water_distance'].keys())}],
-            ["calc_water_velocity", "water_velocity_func_type",
-             "dem_path",
-             {"Water velocity parameters": list(FUNC_PARAMS['water_velocity'].keys())}],
+            ["calc_water_proximity", "water_proximity_func_type",
+             {"Water proximity parameters": list(FUNC_PARAMS['water_proximity'].keys())}],
             ["calc_temperature", "temperature_func_type",
              "water_temp_dry_raster_path", "water_temp_wet_raster_path",
              {"Temperature parameters": list(FUNC_PARAMS['temperature'].keys())}],
             ["calc_ndvi", "ndvi_func_type",
              "ndvi_dry_raster_path", "ndvi_wet_raster_path",
              {"NDVI parameters": list(FUNC_PARAMS['ndvi'].keys())}],
-            ["urbanization_func_type", "urbanization_table_path"],
+            ["calc_water_velocity", "water_velocity_func_type",
+             "dem_path",
+             {"Water velocity parameters": list(FUNC_PARAMS['water_velocity'].keys())}],
+            ["calc_user_1", "user_func_type_1", "user_raster_path_1",
+             {"Input parameters": list(FUNC_PARAMS_USER(1).keys())}],
+            ["calc_user_2", "user_func_type_2", "user_raster_path_2",
+             {"Input parameters": list(FUNC_PARAMS_USER(2).keys())}],
+            ["calc_user_3", "user_func_type_3", "user_raster_path_3",
+             {"Input parameters": list(FUNC_PARAMS_USER(3).keys())}],
         ],
         "hidden": ["n_workers"],
         "forum_tag": 'schisto',
@@ -211,18 +230,43 @@ MODEL_SPEC = {
         'spatial_keys': [
             'aoi_vector_path', 'population_count_path', 'dem_path',
             'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
-            'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path'],
+            'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path',
+            'user_raster_path_1', 'user_raster_path_2', 'user_raster_path_2'],
         'different_projections_ok': True,
     },
     'args': {
         'workspace_dir': spec_utils.WORKSPACE,
         'results_suffix': spec_utils.SUFFIX,
         'n_workers': spec_utils.N_WORKERS,
-        "calc_population": {
+        "decay_distance": {
+            "type": "number",
+            "units": u.meter,
+            "about": gettext("Maximum threat distance from water risk."),
+            "name": gettext("max decay distance")
+        },
+        "include_bg": {
             "type": "boolean",
-            "about": gettext("Calculate population."),
-            "name": gettext("calculate population"),
-            "required": False
+            "required": False,
+            "about": gettext("Calculate risk for the Biomphalaria snail."),
+            "name": gettext("Snail Biomphalaria (bg)")
+        },
+        "include_bt": {
+            "type": "boolean",
+            "required": False,
+            "about": gettext("Calculate risk for the Bulinus truncatus snail."),
+            "name": gettext("Snail Bulinus truncatus (bt)")
+        },
+        "include_sh": {
+            "type": "boolean",
+            "required": False,
+            "about": gettext("Calculate risk for the S-haematobium parasite."),
+            "name": gettext("Parasite S-haematboium (sh)")
+        },
+        "include_sm": {
+            "type": "boolean",
+            "required": False,
+            "about": gettext("Calculate risk for the S-mansoni parasite."),
+            "name": gettext("Parasite S-mansoni (sm)")
         },
         "aoi_vector_path": {
             **spec_utils.AOI,
@@ -234,11 +278,7 @@ MODEL_SPEC = {
                 "is selected and the Grid Connection Points table is provided."
             )
         },
-        "population_func_type": {
-            **SPEC_FUNC_TYPES,
-            "required": "calc_population",
-            "allowed": "calc_population"
-        },
+        **FUNC_PARAMS['population'],
         'population_count_path': {
             'type': 'raster',
             'name': 'population raster',
@@ -250,35 +290,22 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the number of inhabitants per pixel."
             ),
-            "required": "calc_population",
-            "allowed": "calc_population"
+            "required": True,
         },
-        **FUNC_PARAMS['population'],
-        "urbanization_func_type": {
+        "population_func_type": {
             **SPEC_FUNC_TYPES,
             "required": True,
-            #"allowed": "calc_urbanization"
         },
-        "urbanization_table_path": {
-            "type": "csv",
-            #"index_col": "suit_factor",
-            #"columns": **SPEC_FUNC_COLS['urbanization_func_type'],
-            "required": "urbanization_func_type != 'default'",
-            "allowed": "urbanization_func_type != 'default'",
-            "about": gettext(
-                "A table mapping each suitibility factor to a function."),
-            "name": gettext("urbanization table")
-        },
-        "calc_water_distance": {
+        "calc_water_proximity": {
             "type": "boolean",
-            "about": gettext("Calculate water distance."),
-            "name": gettext("calculate water distance"),
+            "about": gettext("Calculate water proximity. Uses the water presence raster input."),
+            "name": gettext("calculate water proximity"),
             "required": False
         },
-        "water_distance_func_type": {
+        "water_proximity_func_type": {
             **SPEC_FUNC_TYPES,
-            "required": "calc_water_distance",
-            "allowed": "calc_water_distance",
+            "required": "calc_water_proximity",
+            "allowed": "calc_water_proximity",
         },
         'water_presence_path': {
             'type': 'raster',
@@ -287,10 +314,9 @@ MODEL_SPEC = {
             'about': (
                 "A raster indicating presence of water."
             ),
-            "required": "calc_water_distance",
-            "allowed": "calc_water_distance"
+            "required": True,
         },
-        **FUNC_PARAMS['water_distance'],
+        **FUNC_PARAMS['water_proximity'],
         "calc_water_velocity": {
             "type": "boolean",
             "about": gettext("Calculate water velocity."),
@@ -389,6 +415,86 @@ MODEL_SPEC = {
             "required": "calc_ndvi",
             "allowed": "calc_ndvi"
         },
+        "calc_user_1": {
+            "type": "boolean",
+            "required": False,
+            "about": gettext("User defined suitability function."),
+            "name": gettext("Additional user defined suitability input.")
+        },
+        "user_func_type_1": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_user_1",
+            "allowed": "calc_user_1"
+        },
+        **FUNC_PARAMS_USER(1),
+        'user_raster_path_1': {
+            'type': 'raster',
+            'name': 'user raster',
+            'bands': {
+                1: {'type': 'number', 'units': u.count}
+            },
+            'projected': True,
+            'projection_units': u.meter,
+            'about': (
+                "A raster representing the user suitability."
+            ),
+            "required": "calc_user_1",
+            "allowed": "calc_user_1"
+        },
+        "calc_user_2": {
+            "type": "boolean",
+            "required": "calc_user_1",
+            "allowed": "calc_user_1",
+            "about": gettext("User defined suitability function."),
+            "name": gettext("Additional user defined suitability input.")
+        },
+        "user_func_type_2": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_user_2",
+            "allowed": "calc_user_2"
+        },
+        **FUNC_PARAMS_USER(2),
+        'user_raster_path_2': {
+            'type': 'raster',
+            'name': 'user raster',
+            'bands': {
+                1: {'type': 'number', 'units': u.count}
+            },
+            'projected': True,
+            'projection_units': u.meter,
+            'about': (
+                "A raster representing the user suitability."
+            ),
+            "required": "calc_user_2",
+            "allowed": "calc_user_2"
+        },
+        "calc_user_3": {
+            "type": "boolean",
+            "required": "calc_user_2",
+            "allowed": "calc_user_2",
+            "about": gettext("User defined suitability function."),
+            "name": gettext("Additional user defined suitability input.")
+        },
+        "user_func_type_3": {
+            **SPEC_FUNC_TYPES,
+            "required": "calc_user_3",
+            "allowed": "calc_user_3"
+        },
+        **FUNC_PARAMS_USER(3),
+        'user_raster_path_3': {
+            'type': 'raster',
+            'name': 'user raster',
+            'bands': {
+                1: {'type': 'number', 'units': u.count}
+            },
+            'projected': True,
+            'projection_units': u.meter,
+            'about': (
+                "A raster representing the user suitability."
+            ),
+            "required": "calc_user_3",
+            "allowed": "calc_user_3"
+        },
     },
     'outputs': {
         'output': {
@@ -425,12 +531,13 @@ _OUTPUT_BASE_FILES = {
     'ndvi_suit_wet': 'ndvi_suit_wet.tif',
     'water_velocity_suit': 'water_velocity_suit.tif',
     'water_proximity_suit': 'water_proximity_suit.tif',
+    'water_depth_suit': 'water_depth_suit.tif',
     'rural_pop_suit': 'rural_pop_suit.tif',
     'urbanization_suit': 'urbanization_suit.tif',
     'rural_urbanization_suit': 'rural_urbanization_suit.tif',
     #'water_stability_suit': 'water_stability_suit.tif',
     'habitat_stability_suit': 'habitat_stability_suit.tif',
-    'habitat_suit_geometric_mean': 'habitat_suit_geometric_mean.tif',
+    'habitat_suit_weighted_mean': 'habitat_suit_weighted_mean.tif',
 }
 
 _INTERMEDIATE_BASE_FILES = {
@@ -452,11 +559,12 @@ _INTERMEDIATE_BASE_FILES = {
     'aligned_mask': 'aligned_valid_pixels_mask.tif',
     'reprojected_admin_boundaries': 'reprojected_admin_boundaries.gpkg',
     'distance': 'distance.tif',
-    'not_water_mask': 'not_water_mask.tif',
-    'inverse_distance': 'inverse_distance.tif',
+    'inverse_water_mask': 'inverse_water_mask.tif',
+    'distance_from_shore': 'distance_from_shore.tif',
     'water_velocity_suit_plot': 'water_vel_suit_plot.png',
     'water_proximity_suit_plot': 'water_proximity_suit_plot.png',
     'water_temp_suit_dry_plot': 'water_temp_suit_dry_plot.png',
+    'water_depth_suit_plot': 'water_depth_suit_plot.png',
 }
 
 
@@ -500,16 +608,12 @@ def execute(args):
             GDAL-compatible land-use/land-cover raster containing integer
             landcover codes.  Must be linearly projected in meters.
 
-        args['calc_population'] = True
         args['population_func_type'] = 'default'
         args['population_table_path'] = ''
         args['population_count_path'] (string): (required) A string path to a
             GDAL-compatible population raster containing people count per
             square km.
         
-        args['urbanization_func_type'] = 'default'
-        args['urbanization_table_path'] = ''
-
         args['calc_water_velocity'] = True
         args['water_velocity_func_type'] = 'default'
         args['water_velocity_table_path'] = ''
@@ -533,7 +637,8 @@ def execute(args):
         'population': _rural_population_density,
         'urbanization': _urbanization,
         'water_velocity': _water_velocity,
-        'water_distance': _water_proximity,
+        'water_proximity': _water_proximity,
+        'water_depth': _water_depth_suit,
         }
     PLOT_PARAMS = {
         'temperature': (0, 50),
@@ -541,7 +646,8 @@ def execute(args):
         'population': (0, 10),
         'urbanization': (0, 10),
         'water_velocity': (0, 30),
-        'water_distance': (0, 1000),
+        'water_proximity': (0, 1000),
+        'water_depth': (0, 2000),
         }
 
     output_dir = os.path.join(args['workspace_dir'], 'output')
@@ -565,10 +671,22 @@ def execute(args):
         n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
 
-    ### Display function choices
+    # Update which snail and parasite variables should be used.
+    # Currently only effects temperature suitability.
+    active_snail_parasite = {}
+    for include_key in ["include_bg", "include_bt", "include_sh", "include_sm"]:
+        if args[include_key]:
+            # get last two characters for id
+            key_id = include_key[-2:]
+            active_snail_parasite[key_id] = SNAIL_PARASITE[key_id]
+
+    if len(active_snail_parasite) == 0:
+        raise ValueError("No snail species or parasite selected.")
+
+    ### Save plots of function choices
     # Read func params from table
     user_func_paths = [
-        'temperature', 'ndvi', 'population', 'water_distance',
+        'temperature', 'ndvi', 'population', 'water_proximity',
         'water_velocity', 'urbanization']
     suit_func_to_use = {}
     for suit_key in user_func_paths:
@@ -588,7 +706,7 @@ def execute(args):
             }
         # NOTE: adding this if/else to handle snail+parasite combos for temperature suitability
         if func_params == None and suit_key == 'temperature':
-            for op_key in SNAIL_PARASITE.keys():
+            for op_key in active_snail_parasite.keys():
                 func_params = {'op_key': op_key}
                 results = _generic_func_values(
                     user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
@@ -739,9 +857,9 @@ def execute(args):
         task_name='distance edt')
 
     water_proximity_task = graph.add_task(
-        suit_func_to_use['water_distance']['func_name'],
+        suit_func_to_use['water_proximity']['func_name'],
         args=(file_registry['distance'], file_registry['water_proximity_suit']),
-        kwargs=suit_func_to_use['water_distance']['func_params'],
+        kwargs=suit_func_to_use['water_proximity']['func_params'],
         dependent_task_list=[dist_edt_task],
         target_path_list=[file_registry[f'water_proximity_suit']],
         task_name=f'Water Proximity Suit')
@@ -800,7 +918,7 @@ def execute(args):
 
     for season in ["dry", "wet"]:
         ### Water temperature
-        for op_key in SNAIL_PARASITE.keys():
+        for op_key in active_snail_parasite.keys():
             # NOTE: adding this if/else to handle default funcs for each
             # snail+parasite combo vs manual func, where manual func will
             # currently apply to each snail+parasite combo 
@@ -847,50 +965,67 @@ def execute(args):
         habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
         outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
 
-    not_water_mask_task = graph.add_task(
-        func=pygeoprocessing.raster_map,
+    ### Distance from shore, proxy for depth ###
+    inverse_water_mask_task = graph.add_task(
+        _inverse_water_mask_op,
         kwargs={
-            'op': numpy.logical_not,
-            'rasters': [file_registry['aligned_water_presence']],
-            'target_path': file_registry['not_water_mask'],
-            'target_nodata': 255,
+            'input_path': [file_registry['aligned_water_presence']],
+            'target_path': file_registry['inverse_water_mask'],
             },
-        target_path_list=[file_registry['not_water_mask']],
+        target_path_list=[file_registry['inverse_water_mask']],
         dependent_task_list=[align_task],
         task_name='inverse water mask')
 
-    inverse_dist_edt_task = graph.add_task(
+    distance_from_shore_task = graph.add_task(
         func=pygeoprocessing.distance_transform_edt,
         args=(
-            (file_registry['not_water_mask'], 1),
-            file_registry['inverse_distance'],
+            (file_registry['inverse_water_mask'], 1),
+            file_registry['distance_from_shore'],
             (default_pixel_size[0], default_pixel_size[0])),
-        target_path_list=[file_registry['inverse_distance']],
+        target_path_list=[file_registry['distance_from_shore']],
         dependent_task_list=[not_water_mask_task],
         task_name='inverse distance edt')
+        
+    water_depth_suit_path = file_registry['water_depth_suit']
+    water_depth_suit_task = graph.add_task(
+        suit_func_to_use['water_depth']['func_name'],
+        args=(
+            file_registry[f'distance_from_shore'],
+            water_depth_suit_path,
+        ),
+        kwargs=suit_func_to_use['water_depth']['func_params'],
+        dependent_task_list=[distance_from_shore_task],
+        target_path_list=[water_depth_suit_path],
+        task_name=f'Water Depth Suit')
+        suitability_tasks.append(water_depth_suit_task)
+        habitat_suit_risk_paths.append(water_depth_suit_path)
+        outputs_to_tile.append((water_depth_suit_path, default_color_path))
+
     ### Population proximity to water
 
 
-    ### Geometric mean of water risks
-    geometric_mean_task = graph.add_task(
+    ### Weighted arithmetic mean of water risks
+    weighted_mean_task = graph.add_task(
         func=pygeoprocessing.raster_map,
         kwargs={
-            'op': _geometric_mean_op,
+            'op': _weighted_mean_op,
             'rasters': habitat_suit_risk_paths,
-            'target_path': file_registry['habitat_suit_geometric_mean'],
+            'target_path': file_registry['habitat_suit_weighted_mean'],
             'target_nodata': BYTE_NODATA,
             },
-        target_path_list=[file_registry['habitat_suit_geometric_mean']],
+        target_path_list=[file_registry['habitat_suit_weighted_mean']],
         dependent_task_list=suitability_tasks,
-        task_name='geometric mean')
-    outputs_to_tile.append((file_registry[f'habitat_suit_geometric_mean'], default_color_path))
+        task_name='weighted mean')
+    outputs_to_tile.append((file_registry[f'habitat_suit_weighted_mean'], default_color_path))
 
 
-    ### Convolve habitat suit geometric mean over land
+    ### Convolve habitat suit weighted mean over land
     # TODO: add this to be an input to the model
     # TODO: mask out water bodies to nodata and not include in risk
-    decay_dist_m = 5000
+    #decay_dist_m = 5000
     #decay_dist_m = 15 * 1000
+    decay_dist_m = float(args['decay_distance'])
+
     kernel_path = os.path.join(
         intermediate_dir, f'kernel{suffix}.tif')
     max_dist_pixels = abs(
@@ -920,14 +1055,14 @@ def execute(args):
     convolved_hab_risk_task = graph.add_task(
         _convolve_and_set_lower_bound,
         kwargs={
-            'signal_path_band': (file_registry['habitat_suit_geometric_mean'], 1),
+            'signal_path_band': (file_registry['habitat_suit_weighted_mean'], 1),
             'kernel_path_band': (kernel_path, 1),
             'target_path': convolved_hab_risk_path,
             'working_dir': intermediate_dir,
         },
         task_name=f'Convolve hab risk - {decay_dist_m}m',
         target_path_list=[convolved_hab_risk_path],
-        dependent_task_list=[kernel_task, geometric_mean_task])
+        dependent_task_list=[kernel_task, weighted_mean_task])
     
     masked_convolved_path = os.path.join(
         intermediate_dir,
@@ -1002,6 +1137,78 @@ def execute(args):
     LOGGER.info("Model completed")
 
 
+def _water_depth_suit(shore_distance_path, target_raster_path):
+    """ """
+    #'y = y1 - (y2 - y1)/(x2-x1)  * x1 + (y2 - y1)/(x2-x1) * x 
+    raster_info = pygeoprocessing.get_raster_info(shore_distance_path)
+    raster_nodata = raster_info['nodata'][0]
+    
+    # Need to define the shape of the function
+    # Taken from the shared google sheet
+    xa = 0 
+    ya = 1 
+    xb = 210  
+    yb = 0.097
+    xc = 211
+    yc = 0.076184 
+    xd = 2000
+    yd = 0
+
+    slope_one = (yb - ya) / (xb - xa)
+    slope_one = (yc - yb) / (xc - xb)
+    slope_three = (yc - yz) / (xc - xz)
+    y_intercept_two = yb - (slope_two * xb)
+    y_intercept_three = yc - (slope_three * xc)
+
+    def op(raster_array):
+        output = numpy.full(
+            raster_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
+        valid_pixels = ~pygeoprocessing.array_equals_nodata(raster_array, raster_nodata)
+
+        # First line
+        mask_one = valid_pixels & (raster_array <= xb)
+        output[mask_one] = (slope_one * raster_array) + ya
+        
+        # Second line
+        mask_two = valid_pixels & (raster_array > xb) & (raster_array <= xc)
+        output[mask_two] = (slope_two * raster_array) + y_intercept_two
+        
+        # Third line
+        mask_three = valid_pixels & (raster_array > xc) & (raster_array <= xd)
+        output[mask_three] = (slope_three * raster_array) + y_intercept_three
+
+        # Everything greater than xd is 0
+        mask_final = valid_pixels & (raster_array > xd)
+        output[mask_final] = 0
+
+        return output
+
+    pygeoprocessing.raster_calculator(
+        [(shore_distance_path, 1)], op, target_raster_path, gdal.GDT_Float32,
+        FLOAT32_NODATA)
+
+def _inverse_water_mask_op(input_path, target_path):
+    """
+    """
+    input_info = pygeoprocessing.get_raster_info(input_path)
+    input_nodata = input_info['nodata'][0]
+    input_datatype = input_info['datatype']
+    #numpy_datatype = pygeoprocessing._gdal_to_numpy_type(input_datatype)
+
+    def _inverse_op(input_array):
+        output = numpy.full(input_array.shape, input_nodata)
+        nodata_mask = pygeoprocessing.array_equals_nodata(input_array, input_nodata)
+        water_mask = input_array == 1
+
+        output[water_mask] = 0
+        output[nodata_mask] = 1
+
+        return output
+    
+    pygeoprocessing.raster_calculator(
+        [(input_path, 1)], _inverse_op, target_path,
+        input_datatype, input_nodata)
+
 def _water_mask_op(input_path, mask_path, target_path):
     """
     """
@@ -1025,25 +1232,12 @@ def _water_mask_op(input_path, mask_path, target_path):
         [(input_path, 1), (mask_path, 1)],
         _mask_op, target_path, gdal.GDT_Float32, input_nodata)
 
-# raster_map op for geometric mean of habitat suitablity risk layers.
-# `arrays` is expected to be a list of numpy arrays
-def _geometric_mean_op(*arrays):
+def _weighted_mean_op(*arrays, weights):
     """
-     raster_map op for geometric mean of habitat suitablity risk layers.
+     raster_map op for weighted arithmetic mean of habitat suitablity risk layers.
      `arrays` is expected to be a list of numpy arrays
-
-     In practice this function has been slow and I wonder if it'd be
-     more efficient to write our own version of scipy.stats.gmean
      """
-    # Treat 0 values as numpy.nan so can omit them from geometric mean
-    #for array in arrays:
-    #    array[array==0] = numpy.nan
-
-    #result = gmean(arrays, axis=0, nan_policy='omit')
-    #nan_mask = numpy.isnan(result)
-    #result[nan_mask] = BYTE_NODATA
-    #return result
-    return gmean(arrays, axis=0)
+    return numpy.average(arrays, axis=0, weights=weights)
 
 def _rural_urbanization_combined(pop_density_path, rural_path, urbanization_path, target_raster_path):
     """Combine the rural and urbanization functions."""
@@ -1087,10 +1281,6 @@ def _tile_raster(raster_path, color_relief_path):
     tile_cmd = f'gdal2tiles --xyz -r near -e --zoom=1-10 --process=4 {rgb_raster_path} {tile_dir}'
     print(tile_cmd)
     subprocess.call(tile_cmd, shell=True)
-
-def _weighted_mean_risk_index(suitability_risk_list, target_raster_path):
-    """ """
-    pass
 
 def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):
     input_array = pygeoprocessing.raster_to_numpy_array(input_raster_path).flatten()
@@ -1269,28 +1459,28 @@ def _ndvi(ndvi_path, target_raster_path):
         [(ndvi_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         BYTE_NODATA)
 
-def _water_proximity(water_distance_path, target_raster_path):
+def _water_proximity(water_proximity_path, target_raster_path):
     """ """
     #ProxRisk <- function(prox){ifelse(prox<1000, 1,ifelse(prox<=15000, -0.0000714 * prox + 1.0714,0))}
-    water_distance_info = pygeoprocessing.get_raster_info(water_distance_path)
-    water_distance_nodata = water_distance_info['nodata'][0]
-    def op(water_distance_array):
+    water_proximity_info = pygeoprocessing.get_raster_info(water_proximity_path)
+    water_proximity_nodata = water_proximity_info['nodata'][0]
+    def op(water_proximity_array):
         output = numpy.full(
-            water_distance_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
-        valid_pixels = (~pygeoprocessing.array_equals_nodata(water_distance_array, water_distance_nodata))
+            water_proximity_array.shape, FLOAT32_NODATA, dtype=numpy.float32)
+        valid_pixels = (~pygeoprocessing.array_equals_nodata(water_proximity_array, water_proximity_nodata))
 
         # 
-        lt_km_mask = valid_pixels & (water_distance_array < 1000)
-        lt_gt_mask = valid_pixels & (water_distance_array >= 1000) & (water_distance_array <= 15000)
-        gt_mask = valid_pixels & (water_distance_array > 15000)
+        lt_km_mask = valid_pixels & (water_proximity_array < 1000)
+        lt_gt_mask = valid_pixels & (water_proximity_array >= 1000) & (water_proximity_array <= 15000)
+        gt_mask = valid_pixels & (water_proximity_array > 15000)
         output[lt_km_mask] = 1
-        output[lt_gt_mask] = -0.0000714 * water_distance_array[lt_gt_mask] + 1.0714
+        output[lt_gt_mask] = -0.0000714 * water_proximity_array[lt_gt_mask] + 1.0714
         output[gt_mask] = 0
 
         return output
 
     pygeoprocessing.raster_calculator(
-        [(water_distance_path, 1)], op, target_raster_path, gdal.GDT_Float32,
+        [(water_proximity_path, 1)], op, target_raster_path, gdal.GDT_Float32,
         FLOAT32_NODATA)
 
 def _urbanization(pop_density_path, target_raster_path):

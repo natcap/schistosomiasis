@@ -202,8 +202,8 @@ MODEL_SPEC = {
             ["water_presence_path"],
             ["population_count_path", "population_func_type",
              {"Population parameters": list(FUNC_PARAMS['population'].keys())}],
-            ["calc_water_proximity", "water_proximity_func_type",
-             {"Water proximity parameters": list(FUNC_PARAMS['water_proximity'].keys())}],
+#            ["calc_water_proximity", "water_proximity_func_type",
+#             {"Water proximity parameters": list(FUNC_PARAMS['water_proximity'].keys())}],
             ["calc_temperature", "temperature_func_type",
              "water_temp_dry_raster_path", "water_temp_wet_raster_path",
              {"Temperature parameters": list(FUNC_PARAMS['temperature'].keys())}],
@@ -296,17 +296,17 @@ MODEL_SPEC = {
             **SPEC_FUNC_TYPES,
             "required": True,
         },
-        "calc_water_proximity": {
-            "type": "boolean",
-            "about": gettext("Calculate water proximity. Uses the water presence raster input."),
-            "name": gettext("calculate water proximity"),
-            "required": False
-        },
-        "water_proximity_func_type": {
-            **SPEC_FUNC_TYPES,
-            "required": "calc_water_proximity",
-            "allowed": "calc_water_proximity",
-        },
+#        "calc_water_proximity": {
+#            "type": "boolean",
+#            "about": gettext("Calculate water proximity. Uses the water presence raster input."),
+#            "name": gettext("calculate water proximity"),
+#            "required": False
+#        },
+#        "water_proximity_func_type": {
+#            **SPEC_FUNC_TYPES,
+#            "required": "calc_water_proximity",
+#            "allowed": "calc_water_proximity",
+#        },
         'water_presence_path': {
             'type': 'raster',
             'name': 'water presence',
@@ -316,13 +316,13 @@ MODEL_SPEC = {
             ),
             "required": True,
         },
-        **FUNC_PARAMS['water_proximity'],
-        "calc_water_velocity": {
-            "type": "boolean",
-            "about": gettext("Calculate water velocity."),
-            "name": gettext("calculate water velocity"),
-            "required": False
-        },
+#        **FUNC_PARAMS['water_proximity'],
+#        "calc_water_velocity": {
+#            "type": "boolean",
+#            "about": gettext("Calculate water velocity."),
+#            "name": gettext("calculate water velocity"),
+#            "required": False
+#        },
         "water_velocity_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_water_velocity",
@@ -538,25 +538,31 @@ _OUTPUT_BASE_FILES = {
     #'water_stability_suit': 'water_stability_suit.tif',
     'habitat_stability_suit': 'habitat_stability_suit.tif',
     'habitat_suit_weighted_mean': 'habitat_suit_weighted_mean.tif',
+    'user_input_suit_1': 'user_input_suit_1.tif',
+    'user_input_suit_2': 'user_input_suit_2.tif',
+    'user_input_suit_3': 'user_input_suit_3.tif',
 }
 
 _INTERMEDIATE_BASE_FILES = {
     'aligned_pop_count': 'aligned_population_count.tif',
     'aligned_pop_density': 'aligned_pop_density.tif',
-    'masked_population': 'masked_population.tif',
-    'population_density': 'population_density.tif',
-    'population_hectares': 'population_hectare.tif',
     'aligned_water_temp_dry': 'aligned_water_temp_dry.tif',
     'aligned_water_temp_wet': 'aligned_water_temp_wet.tif',
     'aligned_ndvi_dry': 'aligned_ndvi_dry.tif',
     'aligned_ndvi_wet': 'aligned_ndvi_wet.tif',
+    'aligned_mask': 'aligned_valid_pixels_mask.tif',
     'aligned_dem': 'aligned_dem.tif',
-    'slope': 'slope.tif',
-    'degree_slope': 'degree_slope.tif',
     'aligned_water_presence': 'aligned_water_presence.tif',
     'aligned_lulc': 'aligned_lulc.tif',
+    'aligned_user_input_1': 'aligned_user_input_1.tif',
+    'aligned_user_input_2': 'aligned_user_input_2.tif',
+    'aligned_user_input_3': 'aligned_user_input_3.tif',
+    'masked_population': 'masked_population.tif',
+    'population_density': 'population_density.tif',
+    'population_hectares': 'population_hectare.tif',
+    'slope': 'slope.tif',
+    'degree_slope': 'degree_slope.tif',
     'masked_lulc': 'masked_lulc.tif',
-    'aligned_mask': 'aligned_valid_pixels_mask.tif',
     'reprojected_admin_boundaries': 'reprojected_admin_boundaries.gpkg',
     'distance': 'distance.tif',
     'inverse_water_mask': 'inverse_water_mask.tif',
@@ -565,6 +571,9 @@ _INTERMEDIATE_BASE_FILES = {
     'water_proximity_suit_plot': 'water_proximity_suit_plot.png',
     'water_temp_suit_dry_plot': 'water_temp_suit_dry_plot.png',
     'water_depth_suit_plot': 'water_depth_suit_plot.png',
+    'user_input_suit_1_plot': 'user_input_suite_1_plot.png',
+    'user_input_suit_2_plot': 'user_input_suite_2_plot.png',
+    'user_input_suit_3_plot': 'user_input_suite_3_plot.png',
 }
 
 
@@ -637,7 +646,7 @@ def execute(args):
         'population': _rural_population_density,
         'urbanization': _urbanization,
         'water_velocity': _water_velocity,
-        'water_proximity': _water_proximity,
+        #'water_proximity': _water_proximity,
         'water_depth': _water_depth_suit,
         }
     PLOT_PARAMS = {
@@ -646,7 +655,7 @@ def execute(args):
         'population': (0, 10),
         'urbanization': (0, 10),
         'water_velocity': (0, 30),
-        'water_proximity': (0, 1000),
+        #'water_proximity': (0, 1000),
         'water_depth': (0, 2000),
         }
 
@@ -685,9 +694,10 @@ def execute(args):
 
     ### Save plots of function choices
     # Read func params from table
+    # Excluding 'water_proximity' for now.
     user_func_paths = [
-        'temperature', 'ndvi', 'population', 'water_proximity',
-        'water_velocity', 'urbanization']
+        'temperature', 'ndvi', 'population', 
+        'water_velocity', 'urbanization', 'water_depth']
     suit_func_to_use = {}
     for suit_key in user_func_paths:
         func_type = args[f'{suit_key}_func_type']
@@ -725,24 +735,21 @@ def execute(args):
                 title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
 
     ### Align and set up datasets
-    # Questions:
-    # 1) what should rasters be aligned to? What is the resolution to do operations on?
-    # 2) should we align and resize at the end or up front?
-
+    # Use the water presence raster for resolution and aligning
     squared_default_pixel_size = _square_off_pixels(
-        args['water_temp_wet_raster_path'])
+        args['water_presence_path'])
 
     raster_input_list = [
+        args['water_presence_path'],
         args['water_temp_dry_raster_path'],
         args['water_temp_wet_raster_path'],
-        args['water_presence_path'],
         args['ndvi_dry_raster_path'],
         args['ndvi_wet_raster_path'],
         args['dem_path']]
     aligned_input_list = [
+        file_registry['aligned_water_presence'],
         file_registry['aligned_water_temp_dry'],
         file_registry['aligned_water_temp_wet'],
-        file_registry['aligned_water_presence'],
         file_registry['aligned_ndvi_dry'],
         file_registry['aligned_ndvi_wet'],
         file_registry['aligned_dem']]
@@ -763,7 +770,7 @@ def execute(args):
     align_task.join()
 
     raster_info = pygeoprocessing.get_raster_info(
-        file_registry['aligned_water_temp_wet'])
+        file_registry['aligned_water_presence'])
     default_bb = raster_info['bounding_box']
     default_wkt = raster_info['projection_wkt']
     default_pixel_size = raster_info['pixel_size']
@@ -785,7 +792,7 @@ def execute(args):
         task_name='Align and resize population'
     )
 
-    ### Production functions
+    ### Production functions ###
     suitability_tasks = []
     habitat_suit_risk_paths = []
     outputs_to_tile = []
@@ -796,7 +803,7 @@ def execute(args):
     
     ### Habitat stability
     # NOTE: not currently calculating this because we don't have the data.
-    # we are just using a binary water presence raster input
+    # We are just using a binary water presence raster input
 #    habitat_stability_task = graph.add_task(
 #        _habitat_stability,
 #        kwargs={
@@ -834,6 +841,9 @@ def execute(args):
         target_path_list=[file_registry['degree_slope']],
         task_name=f'Slope percent to degree')
 
+    # water velocity risk is actually being calculated over the landscape
+    # and not just where water is present. should it be masked to 
+    # water presence?
     water_vel_task = graph.add_task(
         suit_func_to_use['water_velocity']['func_name'],
         args=(file_registry[f'slope'], file_registry['water_velocity_suit']),
@@ -842,10 +852,11 @@ def execute(args):
         target_path_list=[file_registry['water_velocity_suit']],
         task_name=f'Water Velocity Suit')
     suitability_tasks.append(water_vel_task)
-    habitat_suit_risk_paths.append(file_registry['water_velocity_suit'])
+    #habitat_suit_risk_paths.append(file_registry['water_velocity_suit'])
     #outputs_to_tile.append((file_registry['water_velocity_suit'], default_color_path))
 
     ### Proximity to water in meters
+    # NOT USING this suitability metric. Production Func. 9 in colab.
     dist_edt_task = graph.add_task(
         func=pygeoprocessing.distance_transform_edt,
         args=(

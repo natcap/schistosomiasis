@@ -43,10 +43,17 @@ BYTE_NODATA = 255
 
 SCHISTO = "Schisto alpha"
 SNAIL_PARASITE = {
-        "sh": "S-haematobium",
-        "sm": "S-mansoni",
-        "bt": "Bulinus truncatus",
-        "bg": "Biomphalaria"}
+        "sh": "Default: S-haematobium",
+        "sm": "Defualt: S-mansoni",
+        "bt": "Default: Bulinus truncatus",
+        "bg": "Default: Biomphalaria"}
+
+SNAIL_OPTIONS = [ 
+        ("sh", "Default: S-haematobium"),
+        ("sm", "Defualt: S-mansoni")]
+PARASITE_OPTIONS = [
+        ("bt", "Default: Bulinus truncatus"),
+        ("bg", "Default: Biomphalaria")]
 
 SPEC_FUNC_TYPES = {
     "type": "option_string",
@@ -62,6 +69,7 @@ SPEC_FUNC_TYPES = {
         "The function type to apply to the suitability factor."),
     "name": gettext("Suitability function type")
 }
+
 SPEC_FUNC_COLS = {
     'linear': {
         "xa": {"type": "number", "about": gettext(
@@ -154,12 +162,21 @@ FUNC_PARAMS = {
         }
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     },
-    'temperature': {
-        f'temperature_{fn}_param_{key}': {
+    'snail_water_temp': {
+        f'snail_water_temp_{fn}_param_{key}': {
             **spec,
             'name': f'{key}',
-            "required": f"calc_temperature and temperature_func_type == '{fn}'",
-            "allowed": f"calc_temperature and temperature_func_type == '{fn}'",
+            "required": f"calc_temperature and snail_water_temp_func_type == '{fn}'",
+            "allowed": f"calc_temperature and snail_water_temp_func_type == '{fn}'",
+        }
+        for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
+    },
+    'parasite_water_temp': {
+        f'parasite_water_temp_{fn}_param_{key}': {
+            **spec,
+            'name': f'{key}',
+            "required": f"calc_temperature and parasite_water_temp_func_type == '{fn}'",
+            "allowed": f"calc_temperature and parasite_water_temp_func_type == '{fn}'",
         }
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     },
@@ -176,7 +193,7 @@ FUNC_PARAMS = {
 
 def user_input_id(input_id):
     return {
-        f'user_{fn}_param_{key}': {
+        f'user_{input_id}_{fn}_param_{key}': {
             **spec,
             'name': f'{key}',
             "required": f"calc_user_{input_id} and user_func_type_{input_id} == '{fn}'",
@@ -186,6 +203,36 @@ def user_input_id(input_id):
     }
 
 FUNC_PARAMS_USER = user_input_id
+
+def temp_spec_func_types(default_type):
+    """"""
+    options_dict = {
+        'snail': SNAIL_OPTIONS,
+        'parasite': PARASITE_OPTIONS,
+    }
+
+    default_param_list = options_dict[default_type]
+
+    default_options = {
+        f"{key}":{"display_name": gettext(f"{name}")} for key, name in default_param_list
+    }
+
+    return {
+        "type": "option_string",
+        "options": {
+            **default_options,
+            "linear": {"display_name": gettext("Linear")},
+            "exponential": {"display_name": gettext("exponential")},
+            "scurve": {"display_name": gettext("scurve")},
+            "trapezoid": {"display_name": gettext("trapezoid")},
+            "gaussian": {"display_name": gettext("gaussian")},
+        },
+        "about": gettext(
+            "The function type to apply to the suitability factor."),
+        "name": gettext(f"{default_type} suitability function type")
+    }
+
+TEMP_SPEC_FUNC_TYPES = temp_spec_func_types
 
 MODEL_SPEC = {
     'model_id': 'schistosomiasis',
@@ -198,26 +245,32 @@ MODEL_SPEC = {
             ['workspace_dir', 'results_suffix'],
             ['aoi_vector_path'],
             ['decay_distance'],
-            [f'include_{x}' for x in ['bg', 'bt', 'sh', 'sm']],
             ["water_presence_path"],
             ["population_count_path", "population_func_type",
              {"Population parameters": list(FUNC_PARAMS['population'].keys())}],
 #            ["calc_water_proximity", "water_proximity_func_type",
 #             {"Water proximity parameters": list(FUNC_PARAMS['water_proximity'].keys())}],
-            ["calc_temperature", "temperature_func_type",
-             "water_temp_dry_raster_path", "water_temp_wet_raster_path",
-             {"Temperature parameters": list(FUNC_PARAMS['temperature'].keys())}],
+            ["calc_water_depth", "water_depth_weight"],
+            ["calc_temperature", "water_temp_dry_path", "water_temp_wet_path",
+            "snail_water_temp_dry_weight", "snail_water_temp_wet_weight", "snail_water_temp_func_type", 
+              {"Snail temperature parameters": list(FUNC_PARAMS['snail_water_temp'].keys())},
+            "parasite_water_temp_dry_weight", "parasite_water_temp_wet_weight", "parasite_water_temp_func_type", 
+              {"Parasite temperature parameters": list(FUNC_PARAMS['parasite_water_temp'].keys())}],
             ["calc_ndvi", "ndvi_func_type",
-             "ndvi_dry_raster_path", "ndvi_wet_raster_path",
+             "ndvi_dry_path", "ndvi_dry_weight",
+             "ndvi_wet_path", "ndvi_wet_weight",
              {"NDVI parameters": list(FUNC_PARAMS['ndvi'].keys())}],
             ["calc_water_velocity", "water_velocity_func_type",
-             "dem_path",
+             "dem_path", "water_velocity_weight",
              {"Water velocity parameters": list(FUNC_PARAMS['water_velocity'].keys())}],
-            ["calc_user_1", "user_func_type_1", "user_raster_path_1",
+            ["calc_user_1", "user_func_type_1",
+             "user_path_1", "user_weight_1",
              {"Input parameters": list(FUNC_PARAMS_USER(1).keys())}],
-            ["calc_user_2", "user_func_type_2", "user_raster_path_2",
+            ["calc_user_2", "user_func_type_2",
+             "user_path_2", "user_weight_2",
              {"Input parameters": list(FUNC_PARAMS_USER(2).keys())}],
-            ["calc_user_3", "user_func_type_3", "user_raster_path_3",
+            ["calc_user_3", "user_func_type_3",
+             "user_path_3", "user_weight_3",
              {"Input parameters": list(FUNC_PARAMS_USER(3).keys())}],
         ],
         "hidden": ["n_workers"],
@@ -231,7 +284,7 @@ MODEL_SPEC = {
             'aoi_vector_path', 'population_count_path', 'dem_path',
             'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
             'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path',
-            'user_raster_path_1', 'user_raster_path_2', 'user_raster_path_2'],
+            'user_path_1', 'user_path_2', 'user_path_3'],
         'different_projections_ok': True,
     },
     'args': {
@@ -243,30 +296,6 @@ MODEL_SPEC = {
             "units": u.meter,
             "about": gettext("Maximum threat distance from water risk."),
             "name": gettext("max decay distance")
-        },
-        "include_bg": {
-            "type": "boolean",
-            "required": False,
-            "about": gettext("Calculate risk for the Biomphalaria snail."),
-            "name": gettext("Snail Biomphalaria (bg)")
-        },
-        "include_bt": {
-            "type": "boolean",
-            "required": False,
-            "about": gettext("Calculate risk for the Bulinus truncatus snail."),
-            "name": gettext("Snail Bulinus truncatus (bt)")
-        },
-        "include_sh": {
-            "type": "boolean",
-            "required": False,
-            "about": gettext("Calculate risk for the S-haematobium parasite."),
-            "name": gettext("Parasite S-haematboium (sh)")
-        },
-        "include_sm": {
-            "type": "boolean",
-            "required": False,
-            "about": gettext("Calculate risk for the S-mansoni parasite."),
-            "name": gettext("Parasite S-mansoni (sm)")
         },
         "aoi_vector_path": {
             **spec_utils.AOI,
@@ -296,6 +325,21 @@ MODEL_SPEC = {
             **SPEC_FUNC_TYPES,
             "required": True,
         },
+        "calc_water_depth": {
+            "type": "boolean",
+            "about": gettext(
+                "Calculate water depth. Using the water presence raster input, "
+                "uses a water distance from shore as a proxy for depth."),
+            "name": gettext("calculate water depth"),
+            "required": False
+        },
+        "water_depth_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("water depth risk weight"),
+            "required": "calc_water_depth",
+            "allowed": "calc_water_depth"
+        },
 #        "calc_water_proximity": {
 #            "type": "boolean",
 #            "about": gettext("Calculate water proximity. Uses the water presence raster input."),
@@ -307,7 +351,8 @@ MODEL_SPEC = {
 #            "required": "calc_water_proximity",
 #            "allowed": "calc_water_proximity",
 #        },
-        'water_presence_path': {
+#        **FUNC_PARAMS['water_proximity'],
+        "water_presence_path": {
             'type': 'raster',
             'name': 'water presence',
             'bands': {1: {'type': 'integer'}},
@@ -316,13 +361,12 @@ MODEL_SPEC = {
             ),
             "required": True,
         },
-#        **FUNC_PARAMS['water_proximity'],
-#        "calc_water_velocity": {
-#            "type": "boolean",
-#            "about": gettext("Calculate water velocity."),
-#            "name": gettext("calculate water velocity"),
-#            "required": False
-#        },
+        "calc_water_velocity": {
+            "type": "boolean",
+            "about": gettext("Calculate water velocity."),
+            "name": gettext("calculate water velocity"),
+            "required": False
+        },
         "water_velocity_func_type": {
             **SPEC_FUNC_TYPES,
             "required": "calc_water_velocity",
@@ -335,21 +379,22 @@ MODEL_SPEC = {
             "required": "calc_water_velocity",
             "allowed": "calc_water_velocity"
         },
+        "water_velocity_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("water velocity risk weight"),
+            "required": "calc_water_velocity",
+            "allowed": "calc_water_velocity"
+        },
         "calc_temperature": {
             "type": "boolean",
-            "about": gettext("Calculate temperature."),
-            "name": gettext("calculate temperature"),
+            "about": gettext("Calculate water temperature."),
+            "name": gettext("calculate water temperature"),
             "required": False
         },
-        "temperature_func_type": {
-            **SPEC_FUNC_TYPES,
-            "required": "calc_temperature",
-            "allowed": "calc_temperature"
-        },
-        **FUNC_PARAMS['temperature'],
-        'water_temp_dry_raster_path': {
+        'water_temp_dry_path': {
             'type': 'raster',
-            'name': 'water temp dry raster',
+            'name': 'dry season temperature raster',
             'bands': {
                 1: {'type': 'number', 'units': u.count}
             },
@@ -361,9 +406,9 @@ MODEL_SPEC = {
             "required": "calc_temperature",
             "allowed": "calc_temperature"
         },
-        'water_temp_wet_raster_path': {
+        'water_temp_wet_path': {
             'type': 'raster',
-            'name': 'water temp wet raster',
+            'name': 'wet season temperature raster',
             'bands': {
                 1: {'type': 'number', 'units': u.count}
             },
@@ -372,6 +417,46 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the water temp for wet season."
             ),
+            "required": "calc_temperature",
+            "allowed": "calc_temperature"
+        },
+        "snail_water_temp_func_type": {
+            **temp_spec_func_types('snail'),
+            "required": "calc_temperature",
+            "allowed": "calc_temperature"
+        },
+        **FUNC_PARAMS['snail_water_temp'],
+        "parasite_water_temp_func_type": {
+            **temp_spec_func_types('parasite'),
+            "required": "calc_temperature",
+            "allowed": "calc_temperature"
+        },
+        **FUNC_PARAMS['parasite_water_temp'],
+        "snail_water_temp_dry_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("snail water temp dry risk weight"),
+            "required": "calc_temperature",
+            "allowed": "calc_temperature"
+        },
+        "snail_water_temp_wet_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("snail water temp wet risk weight"),
+            "required": "calc_temperature",
+            "allowed": "calc_temperature"
+        },
+        "parasite_water_temp_dry_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("parasite water temp dry risk weight"),
+            "required": "calc_temperature",
+            "allowed": "calc_temperature"
+        },
+        "parasite_water_temp_wet_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("parasite water temp wet risk weight"),
             "required": "calc_temperature",
             "allowed": "calc_temperature"
         },
@@ -387,7 +472,7 @@ MODEL_SPEC = {
             "allowed": "calc_ndvi"
         },
         **FUNC_PARAMS['ndvi'],
-        'ndvi_dry_raster_path': {
+        "ndvi_dry_path": {
             'type': 'raster',
             'name': 'ndvi dry raster',
             'bands': {
@@ -401,7 +486,14 @@ MODEL_SPEC = {
             "required": "calc_ndvi",
             "allowed": "calc_ndvi"
         },
-        'ndvi_wet_raster_path': {
+        "ndvi_dry_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("ndvi dry risk weight"),
+            "required": "calc_ndvi",
+            "allowed": "calc_ndvi"
+        },
+        "ndvi_wet_path": {
             'type': 'raster',
             'name': 'ndvi wet raster',
             'bands': {
@@ -412,6 +504,13 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the ndvi for wet season."
             ),
+            "required": "calc_ndvi",
+            "allowed": "calc_ndvi"
+        },
+        "ndvi_wet_weight": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("ndvi wet risk weight"),
             "required": "calc_ndvi",
             "allowed": "calc_ndvi"
         },
@@ -427,7 +526,7 @@ MODEL_SPEC = {
             "allowed": "calc_user_1"
         },
         **FUNC_PARAMS_USER(1),
-        'user_raster_path_1': {
+        'user_path_1': {
             'type': 'raster',
             'name': 'user raster',
             'bands': {
@@ -438,6 +537,13 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the user suitability."
             ),
+            "required": "calc_user_1",
+            "allowed": "calc_user_1"
+        },
+        "user_weight_1": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("User risk weight"),
             "required": "calc_user_1",
             "allowed": "calc_user_1"
         },
@@ -454,7 +560,7 @@ MODEL_SPEC = {
             "allowed": "calc_user_2"
         },
         **FUNC_PARAMS_USER(2),
-        'user_raster_path_2': {
+        'user_path_2': {
             'type': 'raster',
             'name': 'user raster',
             'bands': {
@@ -467,6 +573,13 @@ MODEL_SPEC = {
             ),
             "required": "calc_user_2",
             "allowed": "calc_user_2"
+        },
+        "user_weight_2": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("User risk weight"),
+            "required": "calc_user_2",
+            "allowed": "calc_user_2",
         },
         "calc_user_3": {
             "type": "boolean",
@@ -481,7 +594,7 @@ MODEL_SPEC = {
             "allowed": "calc_user_3"
         },
         **FUNC_PARAMS_USER(3),
-        'user_raster_path_3': {
+        'user_path_3': {
             'type': 'raster',
             'name': 'user raster',
             'bands': {
@@ -492,6 +605,13 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the user suitability."
             ),
+            "required": "calc_user_3",
+            "allowed": "calc_user_3"
+        },
+        "user_weight_3": {
+            "type": "ratio",
+            "about": gettext("The weight this factor should have on overall risk."),
+            "name": gettext("User risk weight"),
             "required": "calc_user_3",
             "allowed": "calc_user_3"
         },
@@ -519,14 +639,10 @@ MODEL_SPEC = {
 
 
 _OUTPUT_BASE_FILES = {
-    'water_temp_suit_dry_sm': 'water_temp_suit_dry_sm.tif',
-    'water_temp_suit_wet_sm': 'water_temp_suit_wet_sm.tif',
-    'water_temp_suit_dry_sh': 'water_temp_suit_dry_sh.tif',
-    'water_temp_suit_wet_sh': 'water_temp_suit_wet_sh.tif',
-    'water_temp_suit_dry_bg': 'water_temp_suit_dry_bg.tif',
-    'water_temp_suit_wet_bg': 'water_temp_suit_wet_bg.tif',
-    'water_temp_suit_dry_bt': 'water_temp_suit_dry_bt.tif',
-    'water_temp_suit_wet_bt': 'water_temp_suit_wet_bt.tif',
+    'snail_water_temp_suit_dry': 'snail_water_temp_suit_dry.tif',
+    'snail_water_temp_suit_wet': 'snail_water_temp_suit_wet.tif',
+    'parasite_water_temp_suit_dry': 'parasite_water_temp_suit_dry.tif',
+    'parasite_water_temp_suit_wet': 'parasite_water_temp_suit_wet.tif',
     'ndvi_suit_dry': 'ndvi_suit_dry.tif',
     'ndvi_suit_wet': 'ndvi_suit_wet.tif',
     'water_velocity_suit': 'water_velocity_suit.tif',
@@ -633,6 +749,10 @@ def execute(args):
     """
     LOGGER.info(f"Execute {SCHISTO}")
 
+    HABITAT_RISK_KEYS = [
+        'water_velocity', 'water_temp_dry', 'ndvi_dry', 'water_temp_wet',
+        'ndvi_wet', 'user_1', 'user_2', 'user_3']
+
     FUNC_TYPES = {
         'trapezoid': _trapezoid_op,
         'linear': _linear_op,
@@ -680,27 +800,19 @@ def execute(args):
         n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
 
-    # Update which snail and parasite variables should be used.
-    # Currently only effects temperature suitability.
-    active_snail_parasite = {}
-    for include_key in ["include_bg", "include_bt", "include_sh", "include_sm"]:
-        if args[include_key]:
-            # get last two characters for id
-            key_id = include_key[-2:]
-            active_snail_parasite[key_id] = SNAIL_PARASITE[key_id]
-
-    if len(active_snail_parasite) == 0:
-        raise ValueError("No snail species or parasite selected.")
 
     ### Save plots of function choices
     # Read func params from table
     # Excluding 'water_proximity' for now.
     user_func_paths = [
-        'temperature', 'ndvi', 'population', 
+        'ndvi', 'population', 
         'water_velocity', 'urbanization', 'water_depth']
     suit_func_to_use = {}
     for suit_key in user_func_paths:
-        func_type = args[f'{suit_key}_func_type']
+        if suit_key in ['urbanization', 'water_depth']:
+            func_type = 'default'
+        else:
+            func_type = args[f'{suit_key}_func_type']
         if func_type != 'default':
             func_params = {}
             for key in SPEC_FUNC_COLS[func_type].keys():
@@ -713,46 +825,63 @@ def execute(args):
         suit_func_to_use[suit_key] = {
             'func_name':user_func,
             'func_params':func_params
-            }
-        # NOTE: adding this if/else to handle snail+parasite combos for temperature suitability
-        if func_params == None and suit_key == 'temperature':
-            for op_key in active_snail_parasite.keys():
-                func_params = {'op_key': op_key}
-                results = _generic_func_values(
-                    user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
-                plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}-{op_key}.png")
-                _plotter(
-                    results[0], results[1], save_path=plot_path,
-                    label_x=suit_key, label_y=func_type,
-                    title=f'{suit_key}--{func_type}-{op_key}', xticks=None, yticks=None)
+        }
+
+        results = _generic_func_values(
+            user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
+        plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
+        _plotter(
+            results[0], results[1], save_path=plot_path,
+            label_x=suit_key, label_y=func_type,
+            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+    
+    # Handle Temperature separately because of snail, parasite pairing
+    user_func_paths = ['snail_water_temp', 'parasite_water_temp']
+    for suit_key in user_func_paths:
+        func_type = args[f'{suit_key}_func_type']
+        if func_type in ['sh', 'sm', 'bg', 'bt']:
+            func_params = {'op_key': func_type}
+            user_func = DEFAULT_FUNC_TYPES['temperature']
         else:
-            results = _generic_func_values(
-                user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
-            plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
-            _plotter(
-                results[0], results[1], save_path=plot_path,
-                label_x=suit_key, label_y=func_type,
-                title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+            func_params = {}
+            for key in SPEC_FUNC_COLS[func_type].keys():
+                func_params[key] = float(args[f'{suit_key}_{func_type}_param_{key}'])
+            user_func = FUNC_TYPES[func_type]
+
+        suit_func_to_use[suit_key] = {
+            'func_name':user_func,
+            'func_params':func_params,
+        }
+
+        results = _generic_func_values(
+            user_func, PLOT_PARAMS['temperature'], intermediate_dir, func_params)
+        plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
+        _plotter(
+            results[0], results[1], save_path=plot_path,
+            label_x=suit_key, label_y=func_type,
+            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+
 
     ### Align and set up datasets
     # Use the water presence raster for resolution and aligning
     squared_default_pixel_size = _square_off_pixels(
         args['water_presence_path'])
 
-    raster_input_list = [
-        args['water_presence_path'],
-        args['water_temp_dry_raster_path'],
-        args['water_temp_wet_raster_path'],
-        args['ndvi_dry_raster_path'],
-        args['ndvi_wet_raster_path'],
-        args['dem_path']]
-    aligned_input_list = [
-        file_registry['aligned_water_presence'],
-        file_registry['aligned_water_temp_dry'],
-        file_registry['aligned_water_temp_wet'],
-        file_registry['aligned_ndvi_dry'],
-        file_registry['aligned_ndvi_wet'],
-        file_registry['aligned_dem']]
+    # Built up a list of provided optional rasters to align
+    raster_input_list = [args['water_presence_path']]
+    aligned_input_list = [file_registry['aligned_water_presence']]
+    # TODO: add 'user_1', 'user_2', etc... provided inputs
+    conditional_list = [
+        ('calc_temperature', ['water_temp_dry_path', 'water_temp_wet_path']),
+        ('calc_ndvi', ['ndvi_dry_path', 'ndvi_wet_path']),
+        ('calc_water_velocity', ['dem_path']),
+    ]
+    for conditional, key_list in conditional_list:
+        if args[conditional]:
+            temp_paths = [args[path_key] for path_key in key_list]
+            raster_input_list += temp_paths
+            temp_align_paths = [file_registry[f'aligned_{path_key[:-5]}'] for path_key in key_list]
+            aligned_input_list += temp_align_paths 
 
     align_task = graph.add_task(
         pygeoprocessing.align_and_resize_raster_stack,
@@ -795,6 +924,7 @@ def execute(args):
     ### Production functions ###
     suitability_tasks = []
     habitat_suit_risk_paths = []
+    habitat_suit_risk_weights = []
     outputs_to_tile = []
 
     default_color_path = os.path.join(
@@ -819,62 +949,64 @@ def execute(args):
 
 
     ### Water velocity
-    # calculate slope
-    slope_task = graph.add_task(
-        func=pygeoprocessing.calculate_slope,
-        args=(
-            (file_registry['aligned_dem'], 1),
-            file_registry['slope']),
-        target_path_list=[file_registry['slope']],
-        dependent_task_list=[align_task],
-        task_name='calculate slope')
+    if args['calc_water_velocity']:
+        # calculate slope
+        slope_task = graph.add_task(
+            func=pygeoprocessing.calculate_slope,
+            args=(
+                (file_registry['aligned_dem'], 1),
+                file_registry['slope']),
+            target_path_list=[file_registry['slope']],
+            dependent_task_list=[align_task],
+            task_name='calculate slope')
 
-    degree_task = graph.add_task(
-        pygeoprocessing.raster_map,
-        kwargs={
-            'op': _degree_op,
-            'rasters': [file_registry['slope']],
-            'target_path': file_registry['degree_slope'],
-            'target_nodata': -9999,
-        },
-        dependent_task_list=[slope_task],
-        target_path_list=[file_registry['degree_slope']],
-        task_name=f'Slope percent to degree')
+        degree_task = graph.add_task(
+            pygeoprocessing.raster_map,
+            kwargs={
+                'op': _degree_op,
+                'rasters': [file_registry['slope']],
+                'target_path': file_registry['degree_slope'],
+                'target_nodata': -9999,
+            },
+            dependent_task_list=[slope_task],
+            target_path_list=[file_registry['degree_slope']],
+            task_name=f'Slope percent to degree')
 
-    # water velocity risk is actually being calculated over the landscape
-    # and not just where water is present. should it be masked to 
-    # water presence?
-    water_vel_task = graph.add_task(
-        suit_func_to_use['water_velocity']['func_name'],
-        args=(file_registry[f'slope'], file_registry['water_velocity_suit']),
-        kwargs=suit_func_to_use['water_velocity']['func_params'],
-        dependent_task_list=[slope_task],
-        target_path_list=[file_registry['water_velocity_suit']],
-        task_name=f'Water Velocity Suit')
-    suitability_tasks.append(water_vel_task)
-    #habitat_suit_risk_paths.append(file_registry['water_velocity_suit'])
-    #outputs_to_tile.append((file_registry['water_velocity_suit'], default_color_path))
+        # water velocity risk is actually being calculated over the landscape
+        # and not just where water is present. should it be masked to 
+        # water presence?
+        water_vel_task = graph.add_task(
+            suit_func_to_use['water_velocity']['func_name'],
+            args=(file_registry[f'slope'], file_registry['water_velocity_suit']),
+            kwargs=suit_func_to_use['water_velocity']['func_params'],
+            dependent_task_list=[slope_task],
+            target_path_list=[file_registry['water_velocity_suit']],
+            task_name=f'Water Velocity Suit')
+        suitability_tasks.append(water_vel_task)
+        #habitat_suit_risk_paths.append(file_registry['water_velocity_suit'])
+        #habitat_suit_risk_weights.append(float(args['water_velocity_weight']))
+        #outputs_to_tile.append((file_registry['water_velocity_suit'], default_color_path))
 
     ### Proximity to water in meters
     # NOT USING this suitability metric. Production Func. 9 in colab.
-    dist_edt_task = graph.add_task(
-        func=pygeoprocessing.distance_transform_edt,
-        args=(
-            (file_registry['aligned_water_presence'], 1),
-            file_registry['distance'],
-            (default_pixel_size[0], default_pixel_size[0])),
-        target_path_list=[file_registry['distance']],
-        dependent_task_list=[align_task],
-        task_name='distance edt')
-
-    water_proximity_task = graph.add_task(
-        suit_func_to_use['water_proximity']['func_name'],
-        args=(file_registry['distance'], file_registry['water_proximity_suit']),
-        kwargs=suit_func_to_use['water_proximity']['func_params'],
-        dependent_task_list=[dist_edt_task],
-        target_path_list=[file_registry[f'water_proximity_suit']],
-        task_name=f'Water Proximity Suit')
-    suitability_tasks.append(water_proximity_task)
+#    dist_edt_task = graph.add_task(
+#        func=pygeoprocessing.distance_transform_edt,
+#        args=(
+#            (file_registry['aligned_water_presence'], 1),
+#            file_registry['distance'],
+#            (default_pixel_size[0], default_pixel_size[0])),
+#        target_path_list=[file_registry['distance']],
+#        dependent_task_list=[align_task],
+#        task_name='distance edt')
+#
+#    water_proximity_task = graph.add_task(
+#        suit_func_to_use['water_proximity']['func_name'],
+#        args=(file_registry['distance'], file_registry['water_proximity_suit']),
+#        kwargs=suit_func_to_use['water_proximity']['func_params'],
+#        dependent_task_list=[dist_edt_task],
+#        target_path_list=[file_registry[f'water_proximity_suit']],
+#        task_name=f'Water Proximity Suit')
+#    suitability_tasks.append(water_proximity_task)
     #outputs_to_tile.append((file_registry[f'water_proximity_suit'], default_color_path))
 
     ### Rural population density and urbanization
@@ -927,89 +1059,93 @@ def execute(args):
     #suitability_tasks.append(rural_urbanization_task)
     outputs_to_tile.append((file_registry[f'rural_urbanization_suit'], default_color_path))
 
+    # Temperature and ndvi have different input drivers for wet and dry seasons.
     for season in ["dry", "wet"]:
         ### Water temperature
-        for op_key in active_snail_parasite.keys():
-            # NOTE: adding this if/else to handle default funcs for each
-            # snail+parasite combo vs manual func, where manual func will
-            # currently apply to each snail+parasite combo 
-            # If func_params are None then use op_key with default function
-            if suit_func_to_use['temperature']['func_params'] == None:
-                water_temp_task = graph.add_task(
-                    suit_func_to_use['temperature']['func_name'],
-                    args=(
-                        file_registry[f'aligned_water_temp_{season}'],
-                        file_registry[f'water_temp_suit_{season}_{op_key}'],
-                        op_key
-                    ),
-                    kwargs=suit_func_to_use['temperature']['func_params'],
-                    dependent_task_list=[align_task],
-                    target_path_list=[file_registry[f'water_temp_suit_{season}_{op_key}']],
-                    task_name=f'Water Temp Suit for {season} {op_key}')
-            else:
-                water_temp_task = graph.add_task(
-                    suit_func_to_use['temperature']['func_name'],
-                    args=(
-                        file_registry[f'aligned_water_temp_{season}'],
-                        file_registry[f'water_temp_suit_{season}_{op_key}'],
-                    ),
-                    kwargs=suit_func_to_use['temperature']['func_params'],
-                    dependent_task_list=[align_task],
-                    target_path_list=[file_registry[f'water_temp_suit_{season}_{op_key}']],
-                    task_name=f'Water Temp Suit for {season} {op_key}')
-            suitability_tasks.append(water_temp_task)
-            habitat_suit_risk_paths.append(file_registry[f'water_temp_suit_{season}_{op_key}'])
-            outputs_to_tile.append((file_registry[f'water_temp_suit_{season}_{op_key}'], default_color_path))
+        if args['calc_temperature']:
+            for temp_key in ['snail_water_temp', 'parasite_water_temp']:
+                # NOTE: TODO I'm not sure this if/else is needed anymore if we use the kwargs signature approach
+                if 'op_key' in suit_func_to_use[temp_key]['func_params']:
+                    water_temp_task = graph.add_task(
+                        suit_func_to_use[temp_key]['func_name'],
+                        kwargs={
+                            'water_temp_path':file_registry[f'aligned_water_temp_{season}'],
+                            'target_raster_path':file_registry[f'{temp_key}_suit_{season}'],
+                            **suit_func_to_use[temp_key]['func_params'],
+                            },
+                        dependent_task_list=[align_task],
+                        target_path_list=[file_registry[f'{temp_key}_suit_{season}']],
+                        task_name=f'{temp_key} suit for {season}')
+                else:
+                    water_temp_task = graph.add_task(
+                        suit_func_to_use[temp_key]['func_name'],
+                        args=(
+                            file_registry[f'aligned_water_temp_{season}'],
+                            file_registry[f'{temp_key}_suit_{season}'],
+                        ),
+                        kwargs=suit_func_to_use[temp_key]['func_params'],
+                        dependent_task_list=[align_task],
+                        target_path_list=[file_registry[f'{temp_key}_suit_{season}']],
+                        task_name=f'{temp_key} suit for {season}')
+                suitability_tasks.append(water_temp_task)
+                habitat_suit_risk_paths.append(file_registry[f'{temp_key}_suit_{season}'])
+                habitat_suit_risk_weights.append(float(args[f'{temp_key}_{season}_weight']))
+                outputs_to_tile.append((file_registry[f'{temp_key}_suit_{season}'], default_color_path))
 
         ### Vegetation coverage (NDVI)
-        ndvi_task = graph.add_task(
-            suit_func_to_use['ndvi']['func_name'],
-            args=(
-                file_registry[f'aligned_ndvi_{season}'],
-                file_registry[f'ndvi_suit_{season}'],
-            ),
-            kwargs=suit_func_to_use['ndvi']['func_params'],
-            dependent_task_list=[align_task],
-            target_path_list=[file_registry[f'ndvi_suit_{season}']],
-            task_name=f'NDVI Suit for {season}')
-        suitability_tasks.append(ndvi_task)
-        habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
-        outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
+        if args['calc_ndvi']:
+            ndvi_task = graph.add_task(
+                suit_func_to_use['ndvi']['func_name'],
+                args=(
+                    file_registry[f'aligned_ndvi_{season}'],
+                    file_registry[f'ndvi_suit_{season}'],
+                ),
+                kwargs=suit_func_to_use['ndvi']['func_params'],
+                dependent_task_list=[align_task],
+                target_path_list=[file_registry[f'ndvi_suit_{season}']],
+                task_name=f'NDVI Suit for {season}')
+            suitability_tasks.append(ndvi_task)
+            habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
+            habitat_suit_risk_weights.append(float(args[f'ndvi_{season}_weight']))
+            outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
 
     ### Distance from shore, proxy for depth ###
-    inverse_water_mask_task = graph.add_task(
-        _inverse_water_mask_op,
-        kwargs={
-            'input_path': [file_registry['aligned_water_presence']],
-            'target_path': file_registry['inverse_water_mask'],
-            },
-        target_path_list=[file_registry['inverse_water_mask']],
-        dependent_task_list=[align_task],
-        task_name='inverse water mask')
+    if args['calc_water_depth']:
+        inverse_water_mask_task = graph.add_task(
+            _inverse_water_mask_op,
+            kwargs={
+                'input_path': file_registry['aligned_water_presence'],
+                'target_path': file_registry['inverse_water_mask'],
+                },
+            target_path_list=[file_registry['inverse_water_mask']],
+            dependent_task_list=[align_task],
+            task_name='inverse water mask')
 
-    distance_from_shore_task = graph.add_task(
-        func=pygeoprocessing.distance_transform_edt,
-        args=(
-            (file_registry['inverse_water_mask'], 1),
-            file_registry['distance_from_shore'],
-            (default_pixel_size[0], default_pixel_size[0])),
-        target_path_list=[file_registry['distance_from_shore']],
-        dependent_task_list=[not_water_mask_task],
-        task_name='inverse distance edt')
-        
-    water_depth_suit_path = file_registry['water_depth_suit']
-    water_depth_suit_task = graph.add_task(
-        suit_func_to_use['water_depth']['func_name'],
-        args=(
-            file_registry[f'distance_from_shore'],
-            water_depth_suit_path,
-        ),
-        kwargs=suit_func_to_use['water_depth']['func_params'],
-        dependent_task_list=[distance_from_shore_task],
-        target_path_list=[water_depth_suit_path],
-        task_name=f'Water Depth Suit')
+        distance_from_shore_task = graph.add_task(
+            func=pygeoprocessing.distance_transform_edt,
+            args=(
+                (file_registry['inverse_water_mask'], 1),
+                file_registry['distance_from_shore'],
+                (default_pixel_size[0], default_pixel_size[0])),
+            target_path_list=[file_registry['distance_from_shore']],
+            dependent_task_list=[inverse_water_mask_task],
+            task_name='inverse distance edt')
+            
+        water_depth_suit_path = file_registry['water_depth_suit']
+        water_depth_suit_task = graph.add_task(
+            suit_func_to_use['water_depth']['func_name'],
+            args=(
+                file_registry[f'distance_from_shore'],
+                water_depth_suit_path,
+            ),
+            kwargs=suit_func_to_use['water_depth']['func_params'],
+            dependent_task_list=[distance_from_shore_task],
+            target_path_list=[water_depth_suit_path],
+            task_name=f'Water Depth Suit')
+
         suitability_tasks.append(water_depth_suit_task)
         habitat_suit_risk_paths.append(water_depth_suit_path)
+        habitat_suit_risk_weights.append(float(args['water_depth_weight']))
         outputs_to_tile.append((water_depth_suit_path, default_color_path))
 
     ### Population proximity to water
@@ -1017,10 +1153,10 @@ def execute(args):
 
     ### Weighted arithmetic mean of water risks
     weighted_mean_task = graph.add_task(
-        func=pygeoprocessing.raster_map,
+        _weighted_mean,
         kwargs={
-            'op': _weighted_mean_op,
             'rasters': habitat_suit_risk_paths,
+            'weight_values': habitat_suit_risk_weights,
             'target_path': file_registry['habitat_suit_weighted_mean'],
             'target_nodata': BYTE_NODATA,
             },
@@ -1031,7 +1167,8 @@ def execute(args):
 
 
     ### Convolve habitat suit weighted mean over land
-    # TODO: add this to be an input to the model
+
+    # TODO: add decay dist to be an input to the model
     # TODO: mask out water bodies to nodata and not include in risk
     #decay_dist_m = 5000
     #decay_dist_m = 15 * 1000
@@ -1166,8 +1303,8 @@ def _water_depth_suit(shore_distance_path, target_raster_path):
     yd = 0
 
     slope_one = (yb - ya) / (xb - xa)
-    slope_one = (yc - yb) / (xc - xb)
-    slope_three = (yc - yz) / (xc - xz)
+    slope_two = (yc - yb) / (xc - xb)
+    slope_three = (yc - yd) / (xc - xd)
     y_intercept_two = yb - (slope_two * xb)
     y_intercept_three = yc - (slope_three * xc)
 
@@ -1178,15 +1315,15 @@ def _water_depth_suit(shore_distance_path, target_raster_path):
 
         # First line
         mask_one = valid_pixels & (raster_array <= xb)
-        output[mask_one] = (slope_one * raster_array) + ya
+        output[mask_one] = (slope_one * raster_array[mask_one]) + ya
         
         # Second line
         mask_two = valid_pixels & (raster_array > xb) & (raster_array <= xc)
-        output[mask_two] = (slope_two * raster_array) + y_intercept_two
+        output[mask_two] = (slope_two * raster_array[mask_two]) + y_intercept_two
         
         # Third line
         mask_three = valid_pixels & (raster_array > xc) & (raster_array <= xd)
-        output[mask_three] = (slope_three * raster_array) + y_intercept_three
+        output[mask_three] = (slope_three * raster_array[mask_three]) + y_intercept_three
 
         # Everything greater than xd is 0
         mask_final = valid_pixels & (raster_array > xd)
@@ -1243,12 +1380,26 @@ def _water_mask_op(input_path, mask_path, target_path):
         [(input_path, 1), (mask_path, 1)],
         _mask_op, target_path, gdal.GDT_Float32, input_nodata)
 
-def _weighted_mean_op(*arrays, weights):
-    """
-     raster_map op for weighted arithmetic mean of habitat suitablity risk layers.
-     `arrays` is expected to be a list of numpy arrays
-     """
-    return numpy.average(arrays, axis=0, weights=weights)
+
+def _weighted_mean(rasters, weight_values, target_path, target_nodata):
+    """Weighted arithmetic mean wrapper."""
+
+    def _weighted_mean_op(*arrays):
+        """
+         raster_map op for weighted arithmetic mean of habitat suitablity risk layers.
+         `arrays` is expected to be a list of numpy arrays
+         """
+
+        return numpy.average(arrays, axis=0, weights=weight_values)
+
+    pygeoprocessing.raster_map(
+        op=_weighted_mean_op,
+        rasters=rasters,
+        target_path=target_path,
+        target_nodata=target_nodata,
+        #target_dtype=numpy.float32,
+    )
+
 
 def _rural_urbanization_combined(pop_density_path, rural_path, urbanization_path, target_raster_path):
     """Combine the rural and urbanization functions."""
@@ -1431,8 +1582,8 @@ def _water_temp_suit(water_temp_path, target_raster_path, op_key):
 
         Args:
             water_temp_path (string):
-            op_key (string):
             target_raster_path (string):
+            op_key (string):
 
         Returns:
     """

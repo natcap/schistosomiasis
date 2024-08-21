@@ -6,11 +6,9 @@ i.e., NDVI for both wet and dry season, along with 8 NDVI suitability layers
 """
 import logging
 import os
-import re
 import tempfile
 import shutil
 import subprocess
-import sys
 
 from natcap.invest import spec_utils
 from natcap.invest import gettext
@@ -20,15 +18,11 @@ from natcap.invest import validation
 import numpy
 import pygeoprocessing
 import pygeoprocessing.kernels
-import pygeoprocessing.routing
-from pygeoprocessing import geoprocessing
 import taskgraph
 from osgeo import gdal
 from osgeo import osr
 
-import numpy
 import matplotlib.pyplot as plt
-from scipy.stats import gmean
 
 LOGGER = logging.getLogger(__name__)
 
@@ -37,20 +31,14 @@ logging.getLogger('taskgraph').setLevel('DEBUG')
 # https://stackoverflow.com/questions/56618739/matplotlib-throws-warning-message-because-of-findfont-python
 logging.getLogger('matplotlib.font_manager').disabled = True
 
-UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
 SCHISTO = "Schisto alpha"
-SNAIL_PARASITE = {
-        "sh": "Default: S-haematobium",
-        "sm": "Defualt: S-mansoni",
-        "bt": "Default: Bulinus truncatus",
-        "bg": "Default: Biomphalaria"}
 
 SNAIL_OPTIONS = [ 
-        ("sh", "Default: S-haematobium"),
-        ("sm", "Defualt: S-mansoni")]
+        ("sh", "Default: S. haematobium"),
+        ("sm", "Defualt: S. mansoni")]
 PARASITE_OPTIONS = [
         ("bt", "Default: Bulinus truncatus"),
         ("bg", "Default: Biomphalaria")]
@@ -131,7 +119,6 @@ SPEC_FUNC_COLS = {
     }
 }
 
-
 FUNCS = ['linear', 'trapezoid', 'gaussian', 'scurve', 'exponential']
 
 FUNC_PARAMS = {
@@ -205,7 +192,7 @@ def user_input_id(input_id):
 FUNC_PARAMS_USER = user_input_id
 
 def temp_spec_func_types(default_type):
-    """"""
+    """Specify multiple default options for temperature."""
     options_dict = {
         'snail': SNAIL_OPTIONS,
         'parasite': PARASITE_OPTIONS,
@@ -657,6 +644,7 @@ _OUTPUT_BASE_FILES = {
     'user_input_suit_1': 'user_input_suit_1.tif',
     'user_input_suit_2': 'user_input_suit_2.tif',
     'user_input_suit_3': 'user_input_suit_3.tif',
+    'normalized_convolved_risk': 'normalized_convolved_risk.tif',
 }
 
 _INTERMEDIATE_BASE_FILES = {
@@ -805,8 +793,7 @@ def execute(args):
     # Read func params from table
     # Excluding 'water_proximity' for now.
     user_func_paths = [
-        'ndvi', 'population', 
-        'water_velocity', 'urbanization', 'water_depth']
+        'ndvi', 'population', 'water_velocity', 'urbanization', 'water_depth']
     suit_func_to_use = {}
     for suit_key in user_func_paths:
         if suit_key in ['urbanization', 'water_depth']:
@@ -1009,7 +996,7 @@ def execute(args):
 #    suitability_tasks.append(water_proximity_task)
     #outputs_to_tile.append((file_registry[f'water_proximity_suit'], default_color_path))
 
-    ### Rural population density and urbanization
+    ### Combined rural population and urbanization
     # Population count to density in hectares
     pop_hectare_task = graph.add_task(
         func=_pop_count_to_density,
@@ -1197,9 +1184,25 @@ def execute(args):
             f'Create guassian kernel - {decay_dist_m}m'),
         target_path_list=[kernel_path])
 
+    convolved_hab_risk_norm_path = os.path.join(
+        intermediate_dir,
+        f'convolved_hab_risk_norm_within_{decay_dist_m}{suffix}.tif')
+    convolved_hab_risk_norm_task = graph.add_task(
+        _convolve_and_set_lower_bound,
+        kwargs={
+            'signal_path_band': (file_registry['habitat_suit_weighted_mean'], 1),
+            'kernel_path_band': (kernel_path, 1),
+            'target_path': convolved_hab_risk_norm_path,
+            'working_dir': intermediate_dir,
+            'normalize': True,
+        },
+        task_name=f'Convolve hab risk norm - {decay_dist_m}m',
+        target_path_list=[convolved_hab_risk_norm_path],
+        dependent_task_list=[kernel_task, weighted_mean_task])
+    
     convolved_hab_risk_path = os.path.join(
         intermediate_dir,
-        f'distance_weighted_hab_risk_within_{decay_dist_m}{suffix}.tif')
+        f'convolved_hab_risk_within_{decay_dist_m}{suffix}.tif')
     convolved_hab_risk_task = graph.add_task(
         _convolve_and_set_lower_bound,
         kwargs={
@@ -1207,10 +1210,23 @@ def execute(args):
             'kernel_path_band': (kernel_path, 1),
             'target_path': convolved_hab_risk_path,
             'working_dir': intermediate_dir,
+            'normalize': False,
         },
         task_name=f'Convolve hab risk - {decay_dist_m}m',
         target_path_list=[convolved_hab_risk_path],
         dependent_task_list=[kernel_task, weighted_mean_task])
+        
+    # min-max normalize the absolute risk convolution.
+    # min is known to be 0, so we don't misrepresent positive risk values.
+    normalize_task = graph.add_task(
+        _normalize_raster,
+        kwargs={
+            'raster_path': convolved_hab_risk_path,
+            'target_path': file_registry['normalized_convolved_risk'],
+        },
+        dependent_task_list=[convolved_hab_risk_task],
+        target_path_list=[file_registry['normalized_convolved_risk']],
+        task_name=f'Normalize convolved risk')
     
     masked_convolved_path = os.path.join(
         intermediate_dir,
@@ -1226,44 +1242,47 @@ def execute(args):
         target_path_list=[masked_convolved_path],
         dependent_task_list=[convolved_hab_risk_task])
 
-    ### Weight convolved risk by urbanization
-    risk_to_pop_path = os.path.join(
-        output_dir, f'risk_to_pop{suffix}.tif')
-    risk_to_pop_task = graph.add_task(
-        func=pygeoprocessing.raster_map,
-        kwargs={
-            'op': _multiply_op,
-            'rasters': [file_registry['rural_urbanization_suit'], masked_convolved_path],
-            'target_path': risk_to_pop_path,
-            #'target_nodata': FLOAT32_NODATA,
-            },
-        target_path_list=[risk_to_pop_path],
-        dependent_task_list=[mask_convolve_task, urbanization_task],
-        task_name='risk to population')
-    outputs_to_tile.append((risk_to_pop_path, default_color_path))
+    base_risk_path_list = [convolved_hab_risk_path, file_registry['normalized_convolved_risk']] 
+    base_task_list = [normalize_task, convolved_hab_risk_task] 
+    for calc_type, base_risk_path, base_task in zip(['abs', 'rel'], base_risk_path_list, base_task_list):
+        ### Weight convolved risk by urbanization
+        risk_to_pop_path = os.path.join(
+            output_dir, f'risk_to_pop_{calc_type}{suffix}.tif')
+        risk_to_pop_task = graph.add_task(
+            func=pygeoprocessing.raster_map,
+            kwargs={
+                'op': _multiply_op,
+                'rasters': [file_registry['rural_urbanization_suit'], base_risk_path],
+                'target_path': risk_to_pop_path,
+                #'target_nodata': FLOAT32_NODATA,
+                },
+            target_path_list=[risk_to_pop_path],
+            dependent_task_list=[base_task, urbanization_task],
+            task_name=f'risk to population {calc_type}')
+        outputs_to_tile.append((risk_to_pop_path, default_color_path))
+        
+        # water habitat suitability gets at the risk of maximum potential schisto exposure
+        # schisto exposure x urbanization gets at the risk of likelihood of exposure given socioeconomic factors
+        # final risk, is population. Where are there the most people at the highest risk.
 
-    # water habitat suitability gets at the risk of maximum potential schisto exposure
-    # schisto exposure x urbanization gets at the risk of likelihood of exposure given socioeconomic factors
-    # final risk, is population. Where are there the most people at the highest risk.
-
-    ### Multiply risk_to_pop by people count?
-    # Want to get to how many people are at risk
-    # Multiply by count or by density
-    # TODO: raw and scaled outputs for convolved risk, urbanization x raw convolved, and risk to people
-    risk_to_pop_count_path = os.path.join(
-        output_dir, f'risk_to_pop_count{suffix}.tif')
-    risk_to_pop_count_task = graph.add_task(
-        func=pygeoprocessing.raster_map,
-        kwargs={
-            'op': _multiply_op,
-            'rasters': [risk_to_pop_path, file_registry['aligned_pop_count']],
-            'target_path': risk_to_pop_count_path,
-            #'target_nodata': FLOAT32_NODATA,
-            },
-        target_path_list=[risk_to_pop_count_path],
-        dependent_task_list=[risk_to_pop_task],
-        task_name='risk to pop_count')
-    outputs_to_tile.append((risk_to_pop_count_path, default_color_path))
+        ### Multiply risk_to_pop by people count?
+        # Want to get to how many people are at risk
+        # Multiply by count or by density
+        # TODO: raw and scaled outputs for convolved risk, urbanization x raw convolved, and risk to people
+        risk_to_pop_count_path = os.path.join(
+            output_dir, f'risk_to_pop_count_{calc_type}{suffix}.tif')
+        risk_to_pop_count_task = graph.add_task(
+            func=pygeoprocessing.raster_map,
+            kwargs={
+                'op': _multiply_op,
+                'rasters': [risk_to_pop_path, file_registry['aligned_pop_count']],
+                'target_path': risk_to_pop_count_path,
+                #'target_nodata': FLOAT32_NODATA,
+                },
+            target_path_list=[risk_to_pop_count_path],
+            dependent_task_list=[risk_to_pop_task],
+            task_name=f'risk to pop_count {calc_type}')
+        outputs_to_tile.append((risk_to_pop_count_path, default_color_path))
 
     graph.close()
     graph.join()
@@ -1386,9 +1405,9 @@ def _weighted_mean(rasters, weight_values, target_path, target_nodata):
 
     def _weighted_mean_op(*arrays):
         """
-         raster_map op for weighted arithmetic mean of habitat suitablity risk layers.
-         `arrays` is expected to be a list of numpy arrays
-         """
+        raster_map op for weighted arithmetic mean of habitat suitablity risk layers.
+        `arrays` is expected to be a list of numpy arrays
+        """
 
         return numpy.average(arrays, axis=0, weights=weight_values)
 
@@ -1400,6 +1419,27 @@ def _weighted_mean(rasters, weight_values, target_path, target_nodata):
         #target_dtype=numpy.float32,
     )
 
+
+def _normalize_raster(raster_path, target_path):
+    """Min-Max normalization with mininum fixed to 0."""
+
+    raster = gdal.OpenEx(raster_path) 
+    band = raster.GetRasterBand(1)
+    # returns (min, max, mean, std)
+    stats = band.GetStatistics(False, True)
+    max_val = stats[1]
+    min_val = 0
+
+    def _normalize_op(array):
+        """raster_map op for normalization."""
+
+        return (array - min_val) / (max_val - min_val)
+
+    pygeoprocessing.raster_map(
+        op=_normalize_op,
+        rasters=[raster_path],
+        target_path=target_path,
+    )
 
 def _rural_urbanization_combined(pop_density_path, rural_path, urbanization_path, target_raster_path):
     """Combine the rural and urbanization functions."""
@@ -2150,9 +2190,10 @@ def _pop_count_to_density(pop_count_path, target_path):
     population_raster_info = pygeoprocessing.get_raster_info(pop_count_path)
     pop_pixel_area = abs(numpy.multiply(*population_raster_info['pixel_size']))
 
+    # 10,000 square meters equals 1 hectares.
     kwargs={
-        #'op': lambda x: (x/pop_pixel_area)*10000,  # convert count per pixel to meters sq to hectares
-        'op': lambda x: (x / pop_pixel_area) / 10000,  # convert count per pixel to meters sq to hectares
+        'op': lambda x: (x / pop_pixel_area) * 10000,  # convert count per pixel to meters sq to hectares
+        #'op': lambda x: (x / pop_pixel_area) / 10000,  # convert count per pixel to meters sq to hectares
         'rasters': [pop_count_path],
         'target_path': target_path,
         'target_nodata': -1,
@@ -2172,9 +2213,6 @@ def _pop_density_to_hectares(pop_density_path, target_path):
     }
 
     pygeoprocessing.raster_map(**kwargs)
-
-
-
 
 def _kernel_gaussian(distance, max_distance):
     """Create a gaussian kernel.
@@ -2198,7 +2236,7 @@ def _kernel_gaussian(distance, max_distance):
 
 
 def _convolve_and_set_lower_bound(
-        signal_path_band, kernel_path_band, target_path, working_dir):
+        signal_path_band, kernel_path_band, target_path, working_dir, normalize):
     """Convolve a raster and set all values below 0 to 0.
 
     Args:
@@ -2210,6 +2248,7 @@ def _convolve_and_set_lower_bound(
         target_path (string): Where the target raster should be written.
         working_dir (string): The working directory that
             ``pygeoprocessing.convolve_2d`` may use for its intermediate files.
+        normalize (bool): whether to normalize the kernel
 
     Returns:
         ``None``
@@ -2219,9 +2258,10 @@ def _convolve_and_set_lower_bound(
         kernel_path_band=kernel_path_band,
         target_path=target_path,
         working_dir=working_dir,
-        #mask_nodata=True,
+        #ignore_nodata_and_edges=True,
+        ignore_nodata_and_edges=False,
         mask_nodata=False,
-        normalize_kernel=True
+        normalize_kernel=normalize
         )
 
     # Sometimes there are negative values that should have been clamped to 0 in

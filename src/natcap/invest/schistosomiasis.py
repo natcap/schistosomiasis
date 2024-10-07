@@ -914,9 +914,11 @@ def execute(args):
     habitat_suit_risk_weights = []
     outputs_to_tile = []
 
-    default_color_path = os.path.join(
+    default_color_dir = os.path.join(
         "C:", os.sep, "Users", "ddenu", "Workspace", "Repositories",
-        "schistosomiasis", "data", "water-temp-wet-colors.txt")
+        "schistosomiasis", "color-profiles")
+    default_color_path = os.path.join(default_color_dir, 'generic-risk-style.txt')
+    pop_color_path = os.path.join(default_color_dir, 'generic-pop-risk-style.txt')
     
     ### Habitat stability
     # NOTE: not currently calculating this because we don't have the data.
@@ -1184,25 +1186,9 @@ def execute(args):
             f'Create guassian kernel - {decay_dist_m}m'),
         target_path_list=[kernel_path])
 
-    convolved_hab_risk_norm_path = os.path.join(
-        intermediate_dir,
-        f'convolved_hab_risk_norm_within_{decay_dist_m}{suffix}.tif')
-    convolved_hab_risk_norm_task = graph.add_task(
-        _convolve_and_set_lower_bound,
-        kwargs={
-            'signal_path_band': (file_registry['habitat_suit_weighted_mean'], 1),
-            'kernel_path_band': (kernel_path, 1),
-            'target_path': convolved_hab_risk_norm_path,
-            'working_dir': intermediate_dir,
-            'normalize': True,
-        },
-        task_name=f'Convolve hab risk norm - {decay_dist_m}m',
-        target_path_list=[convolved_hab_risk_norm_path],
-        dependent_task_list=[kernel_task, weighted_mean_task])
-    
     convolved_hab_risk_path = os.path.join(
-        intermediate_dir,
-        f'convolved_hab_risk_within_{decay_dist_m}{suffix}.tif')
+        output_dir,
+        f'convolved_hab_risk{suffix}.tif')
     convolved_hab_risk_task = graph.add_task(
         _convolve_and_set_lower_bound,
         kwargs={
@@ -1215,6 +1201,7 @@ def execute(args):
         task_name=f'Convolve hab risk - {decay_dist_m}m',
         target_path_list=[convolved_hab_risk_path],
         dependent_task_list=[kernel_task, weighted_mean_task])
+    outputs_to_tile.append((convolved_hab_risk_path, default_color_path))
         
     # min-max normalize the absolute risk convolution.
     # min is known to be 0, so we don't misrepresent positive risk values.
@@ -1227,20 +1214,22 @@ def execute(args):
         dependent_task_list=[convolved_hab_risk_task],
         target_path_list=[file_registry['normalized_convolved_risk']],
         task_name=f'Normalize convolved risk')
+    outputs_to_tile.append((file_registry['normalized_convolved_risk'], default_color_path))
     
-    masked_convolved_path = os.path.join(
-        intermediate_dir,
-        f'masked_hab_risk_within_{decay_dist_m}{suffix}.tif')
-    mask_convolve_task = graph.add_task(
-        _water_mask_op,
-        kwargs={
-            'input_path': convolved_hab_risk_path,
-            'mask_path': file_registry['aligned_water_presence'],
-            'target_path': masked_convolved_path,
-        },
-        task_name=f'Mask convolve hab risk - {decay_dist_m}m',
-        target_path_list=[masked_convolved_path],
-        dependent_task_list=[convolved_hab_risk_task])
+    # TODO: do we want to mask out water presence?
+#    masked_convolved_path = os.path.join(
+#        intermediate_dir,
+#        f'masked_hab_risk_within_{decay_dist_m}{suffix}.tif')
+#    mask_convolve_task = graph.add_task(
+#        _water_mask_op,
+#        kwargs={
+#            'input_path': convolved_hab_risk_path,
+#            'mask_path': file_registry['aligned_water_presence'],
+#            'target_path': masked_convolved_path,
+#        },
+#        task_name=f'Mask convolve hab risk - {decay_dist_m}m',
+#        target_path_list=[masked_convolved_path],
+#        dependent_task_list=[convolved_hab_risk_task])
 
     base_risk_path_list = [convolved_hab_risk_path, file_registry['normalized_convolved_risk']] 
     base_task_list = [normalize_task, convolved_hab_risk_task] 
@@ -1259,7 +1248,7 @@ def execute(args):
             target_path_list=[risk_to_pop_path],
             dependent_task_list=[base_task, urbanization_task],
             task_name=f'risk to population {calc_type}')
-        outputs_to_tile.append((risk_to_pop_path, default_color_path))
+        outputs_to_tile.append((risk_to_pop_path, pop_color_path))
         
         # water habitat suitability gets at the risk of maximum potential schisto exposure
         # schisto exposure x urbanization gets at the risk of likelihood of exposure given socioeconomic factors
@@ -1282,7 +1271,7 @@ def execute(args):
             target_path_list=[risk_to_pop_count_path],
             dependent_task_list=[risk_to_pop_task],
             task_name=f'risk to pop_count {calc_type}')
-        outputs_to_tile.append((risk_to_pop_count_path, default_color_path))
+        outputs_to_tile.append((risk_to_pop_count_path, pop_color_path))
 
     graph.close()
     graph.join()

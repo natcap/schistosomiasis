@@ -795,6 +795,12 @@ def execute(args):
     user_func_paths = [
         'ndvi', 'population', 'water_velocity', 'urbanization', 'water_depth']
     suit_func_to_use = {}
+    # NOTE: saving a companion index.txt file for the notebook to be able
+    # display the plots over the http server. This isn't an ideal solution.
+    plot_index_path = os.path.join(func_plot_dir, 'index.txt')
+    with open(plot_index_path, 'w') as pf:
+        pf.write("Plot index listing.\n")
+    
     for suit_key in user_func_paths:
         if suit_key in ['urbanization', 'water_depth']:
             func_type = 'default'
@@ -814,9 +820,12 @@ def execute(args):
             'func_params':func_params
         }
 
+        plot_png_name = f"{suit_key}-{func_type}.png"
         results = _generic_func_values(
             user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
-        plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
+        plot_path = os.path.join(func_plot_dir, plot_png_name)
+        with open(plot_index_path, 'a') as pf:
+            pf.write(plot_png_name + "\n")
         _plotter(
             results[0], results[1], save_path=plot_path,
             label_x=suit_key, label_y=func_type,
@@ -1272,6 +1281,17 @@ def execute(args):
             dependent_task_list=[risk_to_pop_task],
             task_name=f'risk to pop_count {calc_type}')
         outputs_to_tile.append((risk_to_pop_count_path, pop_color_path))
+
+
+    # NOTE: saving a companion jupyter-layers.txt file for the notebook to be able
+    # display only the currently selected risk layers over the http server.
+    # TODO: make a general notebook JSON config output. include:
+    #     - Bounds, or extents to center the map on, lat,lon
+    layer_index_path = os.path.join(output_dir, 'jupyter-layers.txt')
+    with open(layer_index_path, 'w') as pf:
+        for raster_path, _ in outputs_to_tile:
+            base_name = os.path.splitext(os.path.basename(raster_path))[0]
+            pf.write(base_name + "\n")
 
     graph.close()
     graph.join()

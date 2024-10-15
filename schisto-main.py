@@ -37,9 +37,15 @@ _CIV_SRS = osr.SpatialReference()
 _CIV_SRS.ImportFromEPSG(_CIV_EPSG)
 
 LOCATION_MAP = {
-    'sen': {'srs': _SENEGAL_SRS, 'dir_name': 'Senegal', 'epsg': _SENEGAL_EPSG},
-    'civ': {'srs': _CIV_SRS, 'dir_name': 'CIV', 'epsg': _CIV_EPSG},
-    'tza': {'srs': _TANZANIA_SRS, 'dir_name':'Tanzania', 'epsg': _TANZANIA_EPSG},
+    'sen': {
+        'srs': _SENEGAL_SRS, 'dir_name': 'Senegal', 'epsg': _SENEGAL_EPSG,
+        'aoi_dirs': ['sen_aoi', 'SEN_lsib_0']},
+    'civ': {
+        'srs': _CIV_SRS, 'dir_name': 'CIV', 'epsg': _CIV_EPSG,
+        'aoi_dirs': ['civ_aoi', 'civ_ocha_lvl0']},
+    'tza': {
+        'srs': _TANZANIA_SRS, 'dir_name':'Tanzania', 'epsg': _TANZANIA_EPSG,
+        'aoi_dirs': ['tan_aoi', 'TZA_lsib_0']},
     }
 
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
@@ -135,39 +141,26 @@ def _convert_to_from_density(source_raster_path, target_raster_path,
 
 
 if __name__ == "__main__":
-    key_loc = 'sen'
+    #key_loc = 'sen'
+    key_loc = 'tza'
+    key_suffix = '_mosaic'
     input_dir =  os.path.join(
         'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
         'schistosomiasis', 'data', LOCATION_MAP[key_loc]['dir_name'])
     input_data = os.path.join(input_dir, 'suitability layers')
-    #input_data = os.path.join(
-    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-    #    'schistosomiasis', 'data', 'suitability layers')
     procured_data = os.path.join(input_dir, 'procured-data')
-    #procured_data = os.path.join(
-    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-    #    'schistosomiasis', 'data', 'procured-data')
     preprocess_dir = os.path.join(input_dir, 'preprocessed')
-    #preprocess_dir = os.path.join(
-    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-    #    'schistosomiasis', 'data', 'preprocessed')
-    output_dir = os.path.join(input_dir, 'output_tests_beta')
-    #output_dir = os.path.join(
-    #    'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-    #    'schistosomiasis', 'data', 'output_tests_beta')
-    LOGGER.debug(f'Output dir: {output_dir}')
-
 
     # Project data to Senegal with linear units of meters
     raw_input_data = {}
     raw_input_data['water_temp_dry_raster_path'] = os.path.join(
-        input_data, f'habsuit_waterTemp_dry_2019_{key_loc}.tif')
+        input_data, f'habsuit_waterTemp_dry_2019_{key_loc}{key_suffix}.tif')
     raw_input_data['water_temp_wet_raster_path'] = os.path.join(
-        input_data, f'habsuit_waterTemp_wet_2019_{key_loc}.tif')
+        input_data, f'habsuit_waterTemp_wet_2019_{key_loc}{key_suffix}.tif')
     raw_input_data['ndvi_dry_raster_path'] = os.path.join(
-        input_data, f'habsuit_NDVI_dry_2019_{key_loc}.tif')
+        input_data, f'habsuit_NDVI_dry_2019_{key_loc}{key_suffix}.tif')
     raw_input_data['ndvi_wet_raster_path'] = os.path.join(
-        input_data, f'habsuit_NDVI_wet_2019_{key_loc}.tif')
+        input_data, f'habsuit_NDVI_wet_2019_{key_loc}{key_suffix}.tif')
     #raw_input_data['water_presence_path'] = os.path.join(
     #    input_data, 'sen_basin_water_mask.tif')
     #raw_input_data['water_presence_path'] = os.path.join(
@@ -179,8 +172,6 @@ if __name__ == "__main__":
     n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
 
-
-    args = {}
     for key, path in raw_input_data.items():
         # Before warping we need to check that nodata is deined, otherwise
         # this can leave us with artifacts where data is being created
@@ -207,7 +198,6 @@ if __name__ == "__main__":
 
         target_projected_path = os.path.join(
             preprocess_dir, f'projected_{os.path.basename(path)}')
-        args[key] = target_projected_path
 
         project_task = graph.add_task(
             _gdal_warp,
@@ -229,49 +219,73 @@ if __name__ == "__main__":
     # What does the value in the LandScan datasets represent?
     #   The value of each cell represents an estimated population count for that cell.
     # LandScan FAQ: https://landscan.ornl.gov/about
-    #population_count_path = os.path.join(
-    #    procured_data, 'sen_pd_2020_1km_UNadj.tif')
-    population_count_path = os.path.join(
-        procured_data, f'{key_loc}_pd_2020_1km_UNadj.tif')
-    population_density_path = os.path.join(
-        preprocess_dir, 'population_density.tif')
-    # Population count to population density
-    population_task = graph.add_task(
-        _convert_to_from_density,
-        kwargs={
-            'source_raster_path': population_count_path,
-            'target_raster_path': population_density_path,
-            'direction':'to_density'
+    landscan_pop_path = os.path.join(
+        procured_data, 'landscan-global-2020.tif')
+    landscan_info = pygeoprocessing.get_raster_info(landscan_pop_path)
+    # Need to wait for landscan_info operation
+    graph.join()
+    # Clip to key_loc AOIs
+    for aoi_name in LOCATION_MAP[key_loc]['aoi_dirs']:
+        aoi_path = os.path.join(procured_data, aoi_name, f'{aoi_name}.shp')
+        population_count_path = os.path.join(
+            preprocess_dir, f'{aoi_name}_landscan_2020.tif')
+        landscan_mask_task = graph.add_task(
+            #pygeoprocessing.geoprocessing.mask_raster,
+            pygeoprocessing.geoprocessing.align_and_resize_raster_stack,
+            kwargs={
+                'base_raster_path_list': [landscan_pop_path],
+                'target_raster_path_list': [population_count_path],
+                'resample_method_list': ['bilinear'],
+                'target_pixel_size': landscan_info['pixel_size'],
+                'bounding_box_mode': 'intersection',
+                'base_vector_path_list': [aoi_path],
+                'raster_align_index': 0,
+                },
+            target_path_list=[population_count_path],
+            task_name=f'Mask landscan by AOI: {aoi_name}'
+        )
+        #population_count_path = os.path.join(
+        #    procured_data, f'{key_loc}_pd_2020_1km_UNadj.tif')
+        population_density_path = os.path.join(
+            preprocess_dir, f'{aoi_name}_population_density.tif')
+        # Population count to population density
+        population_task = graph.add_task(
+            _convert_to_from_density,
+            kwargs={
+                'source_raster_path': population_count_path,
+                'target_raster_path': population_density_path,
+                'direction':'to_density'
+                },
+            dependent_task_list=[landscan_mask_task],
+            target_path_list=[population_density_path],
+            task_name=f'Population count in lat/lon to density in meter: {aoi_name}'
+        )
+        population_projected_path = os.path.join(
+            preprocess_dir, f'population_density_projected_{aoi_name}.tif')
+        # Project population density raster
+        project_pop_task = graph.add_task(
+            _gdal_warp,
+            kwargs={
+                'target_path': population_projected_path,
+                'input_path': population_density_path,
+                'dstSRS': LOCATION_MAP[key_loc]['srs']
             },
-        target_path_list=[population_density_path],
-        task_name=f'Population count in lat/lon to density in meter'
-    )
-    population_projected_path = os.path.join(
-        preprocess_dir, 'population_density_projected.tif')
-    # Project population density raster
-    project_pop_task = graph.add_task(
-        _gdal_warp,
-        kwargs={
-            'target_path': population_projected_path,
-            'input_path': population_density_path,
-            'dstSRS': LOCATION_MAP[key_loc]['srs']
-        },
-        target_path_list=[population_projected_path],
-        dependent_task_list=[population_task],
-        task_name=f'Reproject pop density to EPSG: {LOCATION_MAP[key_loc]["epsg"]}'
-    )
-    population_proj_count_path = os.path.join(
-        preprocess_dir, 'population_count_projected.tif')
-    # Projected population density in meters to population count
-    pop_count_task = graph.add_task(
-        func=_pop_density_to_count,
-        kwargs={
-            'pop_density_path': population_projected_path,
-            'target_path': population_proj_count_path,
-        },
-        target_path_list=[population_proj_count_path],
-        dependent_task_list=[project_pop_task],
-        task_name=f'Population meter density to meter count')
+            target_path_list=[population_projected_path],
+            dependent_task_list=[population_task],
+            task_name=f'Reproject pop density to EPSG: {LOCATION_MAP[key_loc]["epsg"]}:{aoi_name}'
+        )
+        population_proj_count_path = os.path.join(
+            preprocess_dir, f'population_count_projected_{aoi_name}.tif')
+        # Projected population density in meters to population count
+        pop_count_task = graph.add_task(
+            func=_pop_density_to_count,
+            kwargs={
+                'pop_density_path': population_projected_path,
+                'target_path': population_proj_count_path,
+            },
+            target_path_list=[population_proj_count_path],
+            dependent_task_list=[project_pop_task],
+            task_name=f'Population meter density to meter count: {aoi_name}')
 
     graph.close()
     graph.join()
@@ -285,35 +299,3 @@ if __name__ == "__main__":
     # completed and was always recalculating, which was slow for development.
     #dem_path = os.path.join(procured_data, 'pit_filled_dem.tif')
 
-    args['workspace_dir'] = output_dir
-    args['results_suffix'] = ""
-
-    args['calc_water_distance'] = True
-    args['water_distance_func_type'] = 'exponential'
-    args['water_distance_table_path'] = os.path.join(procured_data, 'exponential-water-distance.csv')
-
-    args['calc_temperature'] = True
-    args['temperature_func_type'] = 'default'
-    args['temperature_table_path'] = ''
-    #args['temperature_func_type'] = 'linear'
-    #args['temperature_table_path'] = os.path.join(procured_data, 'linear-temperature.csv')
-
-    args['calc_ndvi'] = True
-    args['ndvi_func_type'] = 'default'
-    args['ndvi_table_path'] = ''
-
-    args['calc_population'] = True
-    args['population_func_type'] = 'default'
-    args['population_table_path'] = ''
-    args['population_count_path'] = population_proj_count_path
-    #args['population_count_path'] = population_count_path
-    
-    args['urbanization_func_type'] = 'default'
-    args['urbanization_table_path'] = ''
-
-    args['calc_water_velocity'] = True
-    args['water_velocity_func_type'] = 'default'
-    args['water_velocity_table_path'] = ''
-    args['dem_path'] = dem_path
-
-    schistosomiasis.execute(args)

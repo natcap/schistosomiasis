@@ -4,11 +4,18 @@ parasite (SH and SM). There is a version for the wet season and the dry season;
 i.e., NDVI for both wet and dry season, along with 8 NDVI suitability layers
 (1 per species per season).
 """
+#TODO:
+# - Check out leafmap.org / leafmap python project
+#  - can I add a leafmap colorbar to ipyleaflet map as a widget?
+# - Use hex CSS colors instead of rgb to help with notebook legends
+# - 
+
 import logging
 import os
 import tempfile
 import shutil
 import subprocess
+import json
 
 from natcap.invest import spec_utils
 from natcap.invest import gettext
@@ -788,6 +795,9 @@ def execute(args):
         n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
 
+    # Capture parameters necessary for Notebook companion, save to JSON.
+    nb_json_config_path = os.path.join(output_dir, 'nb-json-config.json')
+    nb_json_config = {}
 
     ### Save plots of function choices
     # Read func params from table
@@ -797,9 +807,7 @@ def execute(args):
     suit_func_to_use = {}
     # NOTE: saving a companion index.txt file for the notebook to be able
     # display the plots over the http server. This isn't an ideal solution.
-    plot_index_path = os.path.join(func_plot_dir, 'index.txt')
-    with open(plot_index_path, 'w') as pf:
-        pf.write("Plot index listing.\n")
+    nb_json_config['plot_paths'] = []
     
     for suit_key in user_func_paths:
         if suit_key in ['urbanization', 'water_depth']:
@@ -824,12 +832,12 @@ def execute(args):
         results = _generic_func_values(
             user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
         plot_path = os.path.join(func_plot_dir, plot_png_name)
-        with open(plot_index_path, 'a') as pf:
-            pf.write(plot_png_name + "\n")
         _plotter(
             results[0], results[1], save_path=plot_path,
             label_x=suit_key, label_y=func_type,
             title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+        # Track the current plots in the NB json config
+        nb_json_config['plot_paths'].append(plot_png_name)
     
     # Handle Temperature separately because of snail, parasite pairing
     user_func_paths = ['snail_water_temp', 'parasite_water_temp']
@@ -857,6 +865,18 @@ def execute(args):
             label_x=suit_key, label_y=func_type,
             title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
 
+    # Get the extents and center of the AOI for notebook companion
+    aoi_info = pygeoprocessing.get_vector_info(args['aoi_vector_path'])
+    # WGS84 WKT
+    srs = osr.SpatialReference()
+    srs.ImportFromEPSG(4326)
+    wgs84_wkt = srs.ExportToWkt()
+    wgs84_bb = pygeoprocessing.geoprocessing.transform_bounding_box(
+            aoi_info['bounding_box'], aoi_info['projection_wkt'], wgs84_wkt)
+    #aoi_lat_center = wgs84_bb[1] + ((wgs84_bb[3] - wgs84_bb[1]) / 2)
+    #aoi_lon_center = wgs84_bb[0] + ((wgs84_bb[2] - wgs84_bb[0]) / 2)
+    aoi_center = (((wgs84_bb[1] + wgs84_bb[3]) / 2), ((wgs84_bb[0] + wgs84_bb[2]) / 2))
+    nb_json_config['aoi_center'] = aoi_center
 
     ### Align and set up datasets
     # Use the water presence raster for resolution and aligning
@@ -1287,11 +1307,12 @@ def execute(args):
     # display only the currently selected risk layers over the http server.
     # TODO: make a general notebook JSON config output. include:
     #     - Bounds, or extents to center the map on, lat,lon
-    layer_index_path = os.path.join(output_dir, 'jupyter-layers.txt')
-    with open(layer_index_path, 'w') as pf:
-        for raster_path, _ in outputs_to_tile:
-            base_name = os.path.splitext(os.path.basename(raster_path))[0]
-            pf.write(base_name + "\n")
+    nb_json_config['layers'] = []
+    for raster_path, _ in outputs_to_tile:
+        base_name = os.path.splitext(os.path.basename(raster_path))[0]
+        nb_json_config['layers'].append(base_name)
+    with open(nb_json_config_path, 'w', encoding='utf-8') as f:
+        json.dump(nb_json_config, f, ensure_ascii=False, indent=4)
 
     graph.close()
     graph.join()
@@ -1487,9 +1508,9 @@ def _tile_raster(raster_path, color_relief_path):
 
     if not os.path.isdir(tile_dir):
         os.mkdir(tile_dir)
-    gdaldem_cmd = f'gdaldem color-relief -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
+    gdaldem_cmd = f'gdaldem color-relief -q -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
     subprocess.call(gdaldem_cmd, shell=True)
-    tile_cmd = f'gdal2tiles --xyz -r near -e --zoom=1-10 --process=4 {rgb_raster_path} {tile_dir}'
+    tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 {rgb_raster_path} {tile_dir}'
     print(tile_cmd)
     subprocess.call(tile_cmd, shell=True)
 

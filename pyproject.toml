@@ -24,3 +24,4 @@ api_version = "0.0.1"
 model_name = "Schisto alpha" # user-facing name
 pyname = "natcap.invest.schistosomiasis" # importable name
 model_id = "schistosomiasis" # model identifier used internally
+notebook_path = "notebooks/ipyleaflet.ipynb"

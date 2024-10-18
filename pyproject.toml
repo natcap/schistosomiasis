@@ -8,10 +8,20 @@ where = ["src"]
 [project]
 name = "schistosomiasis"
 version = "0.1.0"
-dependencies = ["pygeoprocessing", "taskgraph", "matplotlib", "natcap.invest @ git+https://github.com/natcap/invest.git@feature/plugins"]
+dependencies = [
+    "pygeoprocessing",
+    "taskgraph",
+    "matplotlib",
+    "natcap.invest @ git+https://github.com/natcap/invest.git@feature/plugins",
+    "voila",
+    "jupyter",
+    "ipyleaflet",
+    "ipywidgets"
+]
 
 [tool.natcap.invest]
 api_version = "0.0.1"
 model_name = "Schisto alpha" # user-facing name
 pyname = "natcap.invest.schistosomiasis" # importable name
 model_id = "schistosomiasis" # model identifier used internally
+notebook_path = "notebooks/ipyleaflet.ipynb"

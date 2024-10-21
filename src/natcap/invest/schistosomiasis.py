@@ -44,11 +44,11 @@ BYTE_NODATA = 255
 SCHISTO = "Schisto alpha"
 
 SNAIL_OPTIONS = [ 
-        ("sh", "Default: S. haematobium"),
-        ("sm", "Defualt: S. mansoni")]
-PARASITE_OPTIONS = [
         ("bt", "Default: Bulinus truncatus"),
         ("bg", "Default: Biomphalaria")]
+PARASITE_OPTIONS = [
+        ("sh", "Default: S. haematobium"),
+        ("sm", "Defualt: S. mansoni")]
 
 SPEC_FUNC_TYPES = {
     "type": "option_string",

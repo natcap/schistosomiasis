@@ -1,4 +1,5 @@
 """Setup arguments and call schisto module."""
+import argparse
 import logging
 import os
 import re
@@ -141,15 +142,30 @@ def _convert_to_from_density(source_raster_path, target_raster_path,
 
 
 if __name__ == "__main__":
-    #key_loc = 'sen'
-    key_loc = 'tza'
-    key_suffix = '_mosaic'
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--key",
+        help = "The the location key to preprocess data for schistosomiasis."
+               " {'sen' | 'tza' | 'civ'}"
+    )
+
+    parser.add_argument("--input-dir", help = "Input directory.")
+    parser.add_argument("--output-dir", help = "Directory to save outputs.")
+    parser.add_argument(
+            "--input-suffix", required=False, default='',
+            help = "Suffix to use at end of input file paths.")
+
+    args = vars(parser.parse_args())
+
+    key_loc = args['key']
+    key_suffix = args['input_suffix']
+
     input_dir =  os.path.join(
-        'C:', os.sep, 'Users', 'ddenu', 'Workspace', 'Repositories',
-        'schistosomiasis', 'data', LOCATION_MAP[key_loc]['dir_name'])
+        args['input_dir'], LOCATION_MAP[key_loc]['dir_name'])
     input_data = os.path.join(input_dir, 'suitability layers')
     procured_data = os.path.join(input_dir, 'procured-data')
-    preprocess_dir = os.path.join(input_dir, 'preprocessed')
+    
+    preprocess_dir = os.path.join(args['output_dir'], 'preprocessed')
 
     # Project data to Senegal with linear units of meters
     raw_input_data = {}
@@ -161,8 +177,6 @@ if __name__ == "__main__":
         input_data, f'habsuit_NDVI_dry_2019_{key_loc}{key_suffix}.tif')
     raw_input_data['ndvi_wet_raster_path'] = os.path.join(
         input_data, f'habsuit_NDVI_wet_2019_{key_loc}{key_suffix}.tif')
-    #raw_input_data['water_presence_path'] = os.path.join(
-    #    input_data, 'sen_basin_water_mask.tif')
     #raw_input_data['water_presence_path'] = os.path.join(
     #    procured_data, f'basin_water_mask_{key_loc}.tif')
     raw_input_data['water_presence_path'] = os.path.join(

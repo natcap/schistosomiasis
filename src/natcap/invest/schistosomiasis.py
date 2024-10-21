@@ -41,7 +41,26 @@ logging.getLogger('matplotlib.font_manager').disabled = True
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
 
-SCHISTO = "Schisto alpha"
+POP_RISK = {
+    '0%': '247 251 255',
+    '20%': '209 226 243',
+    '40%': '154 200 224',
+    '60%': '82 157 204',
+    '80%': '29 108 177',
+    '100%': '8 48 107',
+    'nv': '1 1 1 0'
+}
+
+GENERIC_RISK = {
+    '0%': '255 255 178',
+    '25%': '254 204 92',
+    '50%': '253 141 60',
+    '75%': '240 59 32',
+    '100%': '189 0 38',
+    'nv': '0 0 0 0'
+}
+
+SCHISTO = "Schistosomiasis"
 
 SNAIL_OPTIONS = [ 
         ("bt", "Default: Bulinus truncatus"),
@@ -777,7 +796,9 @@ def execute(args):
     output_dir = os.path.join(args['workspace_dir'], 'output')
     intermediate_dir = os.path.join(args['workspace_dir'], 'intermediate')
     func_plot_dir = os.path.join(intermediate_dir, 'plot_previews')
-    utils.make_directories([output_dir, intermediate_dir, func_plot_dir])
+    color_profiles_dir = os.path.join(intermediate_dir, 'color-profiles')
+    utils.make_directories(
+            [output_dir, intermediate_dir, func_plot_dir, color_profiles_dir])
 
     suffix = utils.make_suffix_string(args, 'results_suffix')
     file_registry = utils.build_file_registry(
@@ -794,7 +815,7 @@ def execute(args):
         # TypeError when n_workers is None.
         n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
-
+    
     # Capture parameters necessary for Notebook companion, save to JSON.
     nb_json_config_path = os.path.join(output_dir, 'nb-json-config.json')
     nb_json_config = {}
@@ -943,11 +964,7 @@ def execute(args):
     habitat_suit_risk_weights = []
     outputs_to_tile = []
 
-    default_color_dir = os.path.join(
-        "C:", os.sep, "Users", "ddenu", "Workspace", "Repositories",
-        "schistosomiasis", "color-profiles")
-    default_color_path = os.path.join(default_color_dir, 'generic-risk-style.txt')
-    pop_color_path = os.path.join(default_color_dir, 'generic-pop-risk-style.txt')
+
     
     ### Habitat stability
     # NOTE: not currently calculating this because we don't have the data.
@@ -1317,6 +1334,15 @@ def execute(args):
     graph.close()
     graph.join()
 
+    # Write color profiles to text file for gdaldem 
+    default_color_path = os.path.join(color_profiles_dir, 'generic-risk-style.txt')
+    pop_color_path = os.path.join(color_profiles_dir, 'generic-pop-risk-style.txt')
+    color_path_list = [default_color_path, pop_color_path]
+    for color_profile, profile_path in zip([GENERIC_RISK, POP_RISK], color_path_list):
+        with open(profile_path, 'w') as f:
+            for break_key, rgb_val in color_profile.items():
+                f.write(break_key + ' ' + rgb_val + '\n')
+
     ### Tile outputs
     #tile_task = graph.add_task(
     #    _tile_raster,
@@ -1328,7 +1354,6 @@ def execute(args):
     #    dependent_task_list=suitability_tasks)
     for raster_path, color_path in outputs_to_tile:
         _tile_raster(raster_path, color_path)
-        #continue 
 
 
     LOGGER.info("Model completed")

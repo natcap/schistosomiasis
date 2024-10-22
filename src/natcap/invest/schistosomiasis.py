@@ -6,9 +6,6 @@ i.e., NDVI for both wet and dry season, along with 8 NDVI suitability layers
 """
 #TODO:
 # - Check out leafmap.org / leafmap python project
-#  - can I add a leafmap colorbar to ipyleaflet map as a widget?
-# - Use hex CSS colors instead of rgb to help with notebook legends
-# - 
 
 import logging
 import os
@@ -206,11 +203,11 @@ FUNC_PARAMS = {
 
 def user_input_id(input_id):
     return {
-        f'user_{input_id}_{fn}_param_{key}': {
+        f'custom_{input_id}_{fn}_param_{key}': {
             **spec,
             'name': f'{key}',
-            "required": f"calc_user_{input_id} and user_func_type_{input_id} == '{fn}'",
-            "allowed": f"calc_user_{input_id} and user_func_type_{input_id} == '{fn}'",
+            "required": f"calc_custom_{input_id} and custom_func_type_{input_id} == '{fn}'",
+            "allowed": f"calc_custom_{input_id} and custom_func_type_{input_id} == '{fn}'",
         }
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     }
@@ -276,14 +273,14 @@ MODEL_SPEC = {
             ["calc_water_velocity", "water_velocity_func_type",
              "dem_path", "water_velocity_weight",
              {"Water velocity parameters": list(FUNC_PARAMS['water_velocity'].keys())}],
-            ["calc_user_1", "user_func_type_1",
-             "user_path_1", "user_weight_1",
+            ["calc_custom_one", "custom_func_type_one",
+             "custom_path_one", "custom_weight_one",
              {"Input parameters": list(FUNC_PARAMS_USER(1).keys())}],
-            ["calc_user_2", "user_func_type_2",
-             "user_path_2", "user_weight_2",
+            ["calc_custom_two", "custom_func_type_two",
+             "custom_path_two", "custom_weight_two",
              {"Input parameters": list(FUNC_PARAMS_USER(2).keys())}],
-            ["calc_user_3", "user_func_type_3",
-             "user_path_3", "user_weight_3",
+            ["calc_custom_three", "custom_func_type_three",
+             "custom_path_three", "custom_weight_three",
              {"Input parameters": list(FUNC_PARAMS_USER(3).keys())}],
         ],
         "hidden": ["n_workers"],
@@ -297,7 +294,7 @@ MODEL_SPEC = {
             'aoi_vector_path', 'population_count_path', 'dem_path',
             'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
             'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path',
-            'user_path_1', 'user_path_2', 'user_path_3'],
+            'custom_path_one', 'custom_path_two', 'custom_path_three'],
         'different_projections_ok': True,
     },
     'args': {
@@ -527,21 +524,21 @@ MODEL_SPEC = {
             "required": "calc_ndvi",
             "allowed": "calc_ndvi"
         },
-        "calc_user_1": {
+        "calc_custom_one": {
             "type": "boolean",
             "required": False,
             "about": gettext("User defined suitability function."),
             "name": gettext("Additional user defined suitability input.")
         },
-        "user_func_type_1": {
+        "custom_func_type_one": {
             **SPEC_FUNC_TYPES,
-            "required": "calc_user_1",
-            "allowed": "calc_user_1"
+            "required": "calc_custom_one",
+            "allowed": "calc_custom_one"
         },
-        **FUNC_PARAMS_USER(1),
-        'user_path_1': {
+        **FUNC_PARAMS_USER('one'),
+        'custom_path_one': {
             'type': 'raster',
-            'name': 'user raster',
+            'name': 'custom raster',
             'bands': {
                 1: {'type': 'number', 'units': u.count}
             },
@@ -550,32 +547,32 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the user suitability."
             ),
-            "required": "calc_user_1",
-            "allowed": "calc_user_1"
+            "required": "calc_custom_one",
+            "allowed": "calc_custom_one"
         },
-        "user_weight_1": {
+        "custom_weight_one": {
             "type": "ratio",
             "about": gettext("The weight this factor should have on overall risk."),
             "name": gettext("User risk weight"),
-            "required": "calc_user_1",
-            "allowed": "calc_user_1"
+            "required": "calc_custom_one",
+            "allowed": "calc_custom_one"
         },
-        "calc_user_2": {
+        "calc_custom_two": {
             "type": "boolean",
-            "required": "calc_user_1",
-            "allowed": "calc_user_1",
+            "required": "calc_custom_one",
+            "allowed": "calc_custom_one",
             "about": gettext("User defined suitability function."),
             "name": gettext("Additional user defined suitability input.")
         },
-        "user_func_type_2": {
+        "custom_func_type_two": {
             **SPEC_FUNC_TYPES,
-            "required": "calc_user_2",
-            "allowed": "calc_user_2"
+            "required": "calc_custom_two",
+            "allowed": "calc_custom_two"
         },
-        **FUNC_PARAMS_USER(2),
-        'user_path_2': {
+        **FUNC_PARAMS_USER('two'),
+        'custom_path_two': {
             'type': 'raster',
-            'name': 'user raster',
+            'name': 'custom raster',
             'bands': {
                 1: {'type': 'number', 'units': u.count}
             },
@@ -584,32 +581,32 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the user suitability."
             ),
-            "required": "calc_user_2",
-            "allowed": "calc_user_2"
+            "required": "calc_custom_two",
+            "allowed": "calc_custom_two"
         },
-        "user_weight_2": {
+        "custom_weight_two": {
             "type": "ratio",
             "about": gettext("The weight this factor should have on overall risk."),
             "name": gettext("User risk weight"),
-            "required": "calc_user_2",
-            "allowed": "calc_user_2",
+            "required": "calc_custom_two",
+            "allowed": "calc_custom_two",
         },
-        "calc_user_3": {
+        "calc_custom_three": {
             "type": "boolean",
-            "required": "calc_user_2",
-            "allowed": "calc_user_2",
+            "required": "calc_custom_two",
+            "allowed": "calc_custom_two",
             "about": gettext("User defined suitability function."),
             "name": gettext("Additional user defined suitability input.")
         },
-        "user_func_type_3": {
+        "custom_func_type_three": {
             **SPEC_FUNC_TYPES,
-            "required": "calc_user_3",
-            "allowed": "calc_user_3"
+            "required": "calc_custom_three",
+            "allowed": "calc_custom_three"
         },
-        **FUNC_PARAMS_USER(3),
-        'user_path_3': {
+        **FUNC_PARAMS_USER('three'),
+        'custom_path_three': {
             'type': 'raster',
-            'name': 'user raster',
+            'name': 'custom raster',
             'bands': {
                 1: {'type': 'number', 'units': u.count}
             },
@@ -618,15 +615,15 @@ MODEL_SPEC = {
             'about': (
                 "A raster representing the user suitability."
             ),
-            "required": "calc_user_3",
-            "allowed": "calc_user_3"
+            "required": "calc_custom_three",
+            "allowed": "calc_custom_three"
         },
-        "user_weight_3": {
+        "custom_weight_three": {
             "type": "ratio",
             "about": gettext("The weight this factor should have on overall risk."),
             "name": gettext("User risk weight"),
-            "required": "calc_user_3",
-            "allowed": "calc_user_3"
+            "required": "calc_custom_three",
+            "allowed": "calc_custom_three"
         },
     },
     'outputs': {
@@ -667,9 +664,9 @@ _OUTPUT_BASE_FILES = {
     #'water_stability_suit': 'water_stability_suit.tif',
     'habitat_stability_suit': 'habitat_stability_suit.tif',
     'habitat_suit_weighted_mean': 'habitat_suit_weighted_mean.tif',
-    'user_input_suit_1': 'user_input_suit_1.tif',
-    'user_input_suit_2': 'user_input_suit_2.tif',
-    'user_input_suit_3': 'user_input_suit_3.tif',
+    'custom_input_suit_one': 'custom_input_suit_one.tif',
+    'custom_input_suit_two': 'custom_input_suit_two.tif',
+    'custom_input_suit_three': 'custom_input_suit_three.tif',
     'normalized_convolved_risk': 'normalized_convolved_risk.tif',
 }
 
@@ -684,9 +681,9 @@ _INTERMEDIATE_BASE_FILES = {
     'aligned_dem': 'aligned_dem.tif',
     'aligned_water_presence': 'aligned_water_presence.tif',
     'aligned_lulc': 'aligned_lulc.tif',
-    'aligned_user_input_1': 'aligned_user_input_1.tif',
-    'aligned_user_input_2': 'aligned_user_input_2.tif',
-    'aligned_user_input_3': 'aligned_user_input_3.tif',
+    'aligned_custom_input_one': 'aligned_custom_input_one.tif',
+    'aligned_custom_input_two': 'aligned_custom_input_two.tif',
+    'aligned_custom_input_three': 'aligned_custom_input_three.tif',
     'masked_population': 'masked_population.tif',
     'population_density': 'population_density.tif',
     'population_hectares': 'population_hectare.tif',
@@ -701,9 +698,9 @@ _INTERMEDIATE_BASE_FILES = {
     'water_proximity_suit_plot': 'water_proximity_suit_plot.png',
     'water_temp_suit_dry_plot': 'water_temp_suit_dry_plot.png',
     'water_depth_suit_plot': 'water_depth_suit_plot.png',
-    'user_input_suit_1_plot': 'user_input_suite_1_plot.png',
-    'user_input_suit_2_plot': 'user_input_suite_2_plot.png',
-    'user_input_suit_3_plot': 'user_input_suite_3_plot.png',
+    'custom_input_suit_one_plot': 'custom_input_suit_one_plot.png',
+    'custom_input_suit_two_plot': 'custom_input_suit_two_plot.png',
+    'custom_input_suit_three_plot': 'custom_input_suit_three_plot.png',
 }
 
 
@@ -765,7 +762,7 @@ def execute(args):
 
     HABITAT_RISK_KEYS = [
         'water_velocity', 'water_temp_dry', 'ndvi_dry', 'water_temp_wet',
-        'ndvi_wet', 'user_1', 'user_2', 'user_3']
+        'ndvi_wet', 'custom_one', 'custom_two', 'custom_three']
 
     FUNC_TYPES = {
         'trapezoid': _trapezoid_op,
@@ -912,6 +909,9 @@ def execute(args):
         ('calc_temperature', ['water_temp_dry_path', 'water_temp_wet_path']),
         ('calc_ndvi', ['ndvi_dry_path', 'ndvi_wet_path']),
         ('calc_water_velocity', ['dem_path']),
+        ('calc_custom_one', ['custom_path_one']),
+        ('calc_custom_two', ['custom_path_two']),
+        ('calc_custom_three', ['custom_path_three']),
     ]
     for conditional, key_list in conditional_list:
         if args[conditional]:
@@ -964,8 +964,6 @@ def execute(args):
     habitat_suit_risk_weights = []
     outputs_to_tile = []
 
-
-    
     ### Habitat stability
     # NOTE: not currently calculating this because we don't have the data.
     # We are just using a binary water presence raster input
@@ -1182,6 +1180,25 @@ def execute(args):
         habitat_suit_risk_paths.append(water_depth_suit_path)
         habitat_suit_risk_weights.append(float(args['water_depth_weight']))
         outputs_to_tile.append((water_depth_suit_path, default_color_path))
+
+    ### Custom functions provided by user
+    for custom_index in ['one', 'two', 'three']:
+        if args[f'calc_custom_{custom_index}']:
+            custom_task = graph.add_task(
+                suit_func_to_use[f'custom_{custom_index}']['func_name'],
+                args=(
+                    file_registry[f'aligned_ndvi_{season}'],
+                    file_registry[f'ndvi_suit_{season}'],
+                ),
+                kwargs=suit_func_to_use['ndvi']['func_params'],
+                dependent_task_list=[align_task],
+                target_path_list=[file_registry[f'ndvi_suit_{season}']],
+                task_name=f'NDVI Suit for {season}')
+            suitability_tasks.append(ndvi_task)
+            habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
+            habitat_suit_risk_weights.append(float(args[f'ndvi_{season}_weight']))
+            outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
+
 
     ### Population proximity to water
 

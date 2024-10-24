@@ -81,6 +81,20 @@ SPEC_FUNC_TYPES = {
     "name": gettext("Suitability function type")
 }
 
+CUSTOM_SPEC_FUNC_TYPES = {
+    "type": "option_string",
+    "options": {
+        "linear": {"display_name": gettext("Linear")},
+        "exponential": {"display_name": gettext("exponential")},
+        "scurve": {"display_name": gettext("scurve")},
+        "trapezoid": {"display_name": gettext("trapezoid")},
+        "gaussian": {"display_name": gettext("gaussian")},
+    },
+    "about": gettext(
+        "The function type to apply to the suitability factor."),
+    "name": gettext("Suitability function type")
+}
+
 SPEC_FUNC_COLS = {
     'linear': {
         "xa": {"type": "number", "about": gettext(
@@ -206,8 +220,8 @@ def user_input_id(input_id):
         f'custom_{input_id}_{fn}_param_{key}': {
             **spec,
             'name': f'{key}',
-            "required": f"calc_custom_{input_id} and custom_func_type_{input_id} == '{fn}'",
-            "allowed": f"calc_custom_{input_id} and custom_func_type_{input_id} == '{fn}'",
+            "required": f"calc_custom_{input_id} and custom_{input_id}_func_type == '{fn}'",
+            "allowed": f"calc_custom_{input_id} and custom_{input_id}_func_type == '{fn}'",
         }
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     }
@@ -273,15 +287,15 @@ MODEL_SPEC = {
             ["calc_water_velocity", "water_velocity_func_type",
              "dem_path", "water_velocity_weight",
              {"Water velocity parameters": list(FUNC_PARAMS['water_velocity'].keys())}],
-            ["calc_custom_one", "custom_func_type_one",
-             "custom_path_one", "custom_weight_one",
-             {"Input parameters": list(FUNC_PARAMS_USER(1).keys())}],
-            ["calc_custom_two", "custom_func_type_two",
-             "custom_path_two", "custom_weight_two",
-             {"Input parameters": list(FUNC_PARAMS_USER(2).keys())}],
-            ["calc_custom_three", "custom_func_type_three",
-             "custom_path_three", "custom_weight_three",
-             {"Input parameters": list(FUNC_PARAMS_USER(3).keys())}],
+            ["calc_custom_one", "custom_one_func_type",
+             "custom_one_path", "custom_one_weight",
+             {"Input parameters": list(FUNC_PARAMS_USER('one').keys())}],
+            ["calc_custom_two", "custom_two_func_type",
+             "custom_two_path", "custom_two_weight",
+             {"Input parameters": list(FUNC_PARAMS_USER('two').keys())}],
+            ["calc_custom_three", "custom_three_func_type",
+             "custom_three_path", "custom_three_weight",
+             {"Input parameters": list(FUNC_PARAMS_USER('three').keys())}],
         ],
         "hidden": ["n_workers"],
         "forum_tag": 'schisto',
@@ -294,7 +308,7 @@ MODEL_SPEC = {
             'aoi_vector_path', 'population_count_path', 'dem_path',
             'water_temp_dry_raster_path', 'water_temp_wet_raster_path',
             'ndvi_dry_raster_path', 'ndvi_wet_raster_path', 'water_presence_path',
-            'custom_path_one', 'custom_path_two', 'custom_path_three'],
+            'custom_one_path', 'custom_two_path', 'custom_three_path'],
         'different_projections_ok': True,
     },
     'args': {
@@ -530,13 +544,13 @@ MODEL_SPEC = {
             "about": gettext("User defined suitability function."),
             "name": gettext("Additional user defined suitability input.")
         },
-        "custom_func_type_one": {
-            **SPEC_FUNC_TYPES,
+        "custom_one_func_type": {
+            **CUSTOM_SPEC_FUNC_TYPES,
             "required": "calc_custom_one",
             "allowed": "calc_custom_one"
         },
         **FUNC_PARAMS_USER('one'),
-        'custom_path_one': {
+        'custom_one_path': {
             'type': 'raster',
             'name': 'custom raster',
             'bands': {
@@ -550,7 +564,7 @@ MODEL_SPEC = {
             "required": "calc_custom_one",
             "allowed": "calc_custom_one"
         },
-        "custom_weight_one": {
+        "custom_one_weight": {
             "type": "ratio",
             "about": gettext("The weight this factor should have on overall risk."),
             "name": gettext("User risk weight"),
@@ -564,13 +578,13 @@ MODEL_SPEC = {
             "about": gettext("User defined suitability function."),
             "name": gettext("Additional user defined suitability input.")
         },
-        "custom_func_type_two": {
-            **SPEC_FUNC_TYPES,
+        "custom_two_func_type": {
+            **CUSTOM_SPEC_FUNC_TYPES,
             "required": "calc_custom_two",
             "allowed": "calc_custom_two"
         },
         **FUNC_PARAMS_USER('two'),
-        'custom_path_two': {
+        'custom_two_path': {
             'type': 'raster',
             'name': 'custom raster',
             'bands': {
@@ -584,7 +598,7 @@ MODEL_SPEC = {
             "required": "calc_custom_two",
             "allowed": "calc_custom_two"
         },
-        "custom_weight_two": {
+        "custom_two_weight": {
             "type": "ratio",
             "about": gettext("The weight this factor should have on overall risk."),
             "name": gettext("User risk weight"),
@@ -598,13 +612,13 @@ MODEL_SPEC = {
             "about": gettext("User defined suitability function."),
             "name": gettext("Additional user defined suitability input.")
         },
-        "custom_func_type_three": {
-            **SPEC_FUNC_TYPES,
+        "custom_three_func_type": {
+            **CUSTOM_SPEC_FUNC_TYPES,
             "required": "calc_custom_three",
             "allowed": "calc_custom_three"
         },
         **FUNC_PARAMS_USER('three'),
-        'custom_path_three': {
+        'custom_three_path': {
             'type': 'raster',
             'name': 'custom raster',
             'bands': {
@@ -618,7 +632,7 @@ MODEL_SPEC = {
             "required": "calc_custom_three",
             "allowed": "calc_custom_three"
         },
-        "custom_weight_three": {
+        "custom_three_weight": {
             "type": "ratio",
             "about": gettext("The weight this factor should have on overall risk."),
             "name": gettext("User risk weight"),
@@ -664,9 +678,9 @@ _OUTPUT_BASE_FILES = {
     #'water_stability_suit': 'water_stability_suit.tif',
     'habitat_stability_suit': 'habitat_stability_suit.tif',
     'habitat_suit_weighted_mean': 'habitat_suit_weighted_mean.tif',
-    'custom_input_suit_one': 'custom_input_suit_one.tif',
-    'custom_input_suit_two': 'custom_input_suit_two.tif',
-    'custom_input_suit_three': 'custom_input_suit_three.tif',
+    'custom_suit_one': 'custom_suit_one.tif',
+    'custom_suit_two': 'custom_suit_two.tif',
+    'custom_suit_three': 'custom_suit_three.tif',
     'normalized_convolved_risk': 'normalized_convolved_risk.tif',
 }
 
@@ -681,9 +695,9 @@ _INTERMEDIATE_BASE_FILES = {
     'aligned_dem': 'aligned_dem.tif',
     'aligned_water_presence': 'aligned_water_presence.tif',
     'aligned_lulc': 'aligned_lulc.tif',
-    'aligned_custom_input_one': 'aligned_custom_input_one.tif',
-    'aligned_custom_input_two': 'aligned_custom_input_two.tif',
-    'aligned_custom_input_three': 'aligned_custom_input_three.tif',
+    'aligned_custom_one': 'aligned_custom_one.tif',
+    'aligned_custom_two': 'aligned_custom_two.tif',
+    'aligned_custom_three': 'aligned_custom_three.tif',
     'masked_population': 'masked_population.tif',
     'population_density': 'population_density.tif',
     'population_hectares': 'population_hectare.tif',
@@ -698,9 +712,9 @@ _INTERMEDIATE_BASE_FILES = {
     'water_proximity_suit_plot': 'water_proximity_suit_plot.png',
     'water_temp_suit_dry_plot': 'water_temp_suit_dry_plot.png',
     'water_depth_suit_plot': 'water_depth_suit_plot.png',
-    'custom_input_suit_one_plot': 'custom_input_suit_one_plot.png',
-    'custom_input_suit_two_plot': 'custom_input_suit_two_plot.png',
-    'custom_input_suit_three_plot': 'custom_input_suit_three_plot.png',
+    'custom_suit_one_plot': 'custom_suit_one_plot.png',
+    'custom_suit_two_plot': 'custom_suit_two_plot.png',
+    'custom_suit_three_plot': 'custom_suit_three_plot.png',
 }
 
 
@@ -813,21 +827,48 @@ def execute(args):
         n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
     
-    # Capture parameters necessary for Notebook companion, save to JSON.
+    # Write color profiles to text file
+    default_color_path = os.path.join(
+            color_profiles_dir, 'generic-risk-style.txt')
+    pop_color_path = os.path.join(
+            color_profiles_dir, 'generic-pop-risk-style.txt')
+    color_path_list = [default_color_path, pop_color_path]
+    for color_profile, profile_path in zip(
+            [GENERIC_RISK, POP_RISK], color_path_list):
+        with open(profile_path, 'w') as f:
+            for break_key, rgb_val in color_profile.items():
+                f.write(break_key + ' ' + rgb_val + '\n')
+
+    # Set up dictionary to capture parameters necessary for Jupyter Notebook
+    # companion as JSON.
     nb_json_config_path = os.path.join(output_dir, 'nb-json-config.json')
     nb_json_config = {}
 
     ### Save plots of function choices
     # Read func params from table
     # Excluding 'water_proximity' for now.
-    user_func_paths = [
-        'ndvi', 'population', 'water_velocity', 'urbanization', 'water_depth']
+    # TODO: determine whether to display population, urbanization, or 
+    # something else.
+    suitability_keys = [
+        ('ndvi', args['calc_ndvi']),
+        ('population', True),
+        ('water_velocity', args['calc_water_velocity']),
+        ('urbanization', True),
+        ('water_depth', args['calc_water_depth']),
+        ('custom_one', args['calc_custom_one']),
+        ('custom_two', args['calc_custom_two']),
+        ('custom_three', args['calc_custom_three'])]
+
+    # Dictionary mapping function and parameters to suitability input.
     suit_func_to_use = {}
-    # NOTE: saving a companion index.txt file for the notebook to be able
-    # display the plots over the http server. This isn't an ideal solution.
+    # Store plot path locations to display in Jupyter Notebook
     nb_json_config['plot_paths'] = []
     
-    for suit_key in user_func_paths:
+    for suit_key, calc_suit in suitability_keys:
+        # Skip non selected suitability metrics
+        if not calc_suit:
+            continue
+        # Urbanization and water depth have static functions
         if suit_key in ['urbanization', 'water_depth']:
             func_type = 'default'
         else:
@@ -835,6 +876,7 @@ def execute(args):
         if func_type != 'default':
             func_params = {}
             for key in SPEC_FUNC_COLS[func_type].keys():
+                LOGGER.info(f'{suit_key}_{func_type}_param_{key}')
                 func_params[key] = float(args[f'{suit_key}_{func_type}_param_{key}'])
             user_func = FUNC_TYPES[func_type]
         else:
@@ -846,20 +888,22 @@ def execute(args):
             'func_params':func_params
         }
 
-        plot_png_name = f"{suit_key}-{func_type}.png"
-        results = _generic_func_values(
-            user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
-        plot_path = os.path.join(func_plot_dir, plot_png_name)
-        _plotter(
-            results[0], results[1], save_path=plot_path,
-            label_x=suit_key, label_y=func_type,
-            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
-        # Track the current plots in the NB json config
-        nb_json_config['plot_paths'].append(plot_png_name)
+        # Currently can't guess range of custom inputs for plotting
+        if not suit_key.startswith('custom'):
+            plot_png_name = f"{suit_key}-{func_type}.png"
+            results = _generic_func_values(
+                user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
+            plot_path = os.path.join(func_plot_dir, plot_png_name)
+            _plotter(
+                results[0], results[1], save_path=plot_path,
+                label_x=suit_key, label_y=func_type,
+                title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+            # Track the current plots in the NB json config
+            nb_json_config['plot_paths'].append(plot_png_name)
     
     # Handle Temperature separately because of snail, parasite pairing
-    user_func_paths = ['snail_water_temp', 'parasite_water_temp']
-    for suit_key in user_func_paths:
+    suitability_keys = ['snail_water_temp', 'parasite_water_temp']
+    for suit_key in suitability_keys:
         func_type = args[f'{suit_key}_func_type']
         if func_type in ['sh', 'sm', 'bg', 'bt']:
             func_params = {'op_key': func_type}
@@ -891,9 +935,9 @@ def execute(args):
     wgs84_wkt = srs.ExportToWkt()
     wgs84_bb = pygeoprocessing.geoprocessing.transform_bounding_box(
             aoi_info['bounding_box'], aoi_info['projection_wkt'], wgs84_wkt)
-    #aoi_lat_center = wgs84_bb[1] + ((wgs84_bb[3] - wgs84_bb[1]) / 2)
-    #aoi_lon_center = wgs84_bb[0] + ((wgs84_bb[2] - wgs84_bb[0]) / 2)
-    aoi_center = (((wgs84_bb[1] + wgs84_bb[3]) / 2), ((wgs84_bb[0] + wgs84_bb[2]) / 2))
+    aoi_center = (
+        ((wgs84_bb[1] + wgs84_bb[3]) / 2), 
+        ((wgs84_bb[0] + wgs84_bb[2]) / 2))
     nb_json_config['aoi_center'] = aoi_center
 
     ### Align and set up datasets
@@ -904,20 +948,20 @@ def execute(args):
     # Built up a list of provided optional rasters to align
     raster_input_list = [args['water_presence_path']]
     aligned_input_list = [file_registry['aligned_water_presence']]
-    # TODO: add 'user_1', 'user_2', etc... provided inputs
     conditional_list = [
         ('calc_temperature', ['water_temp_dry_path', 'water_temp_wet_path']),
         ('calc_ndvi', ['ndvi_dry_path', 'ndvi_wet_path']),
         ('calc_water_velocity', ['dem_path']),
-        ('calc_custom_one', ['custom_path_one']),
-        ('calc_custom_two', ['custom_path_two']),
-        ('calc_custom_three', ['custom_path_three']),
+        ('calc_custom_one', ['custom_one_path']),
+        ('calc_custom_two', ['custom_two_path']),
+        ('calc_custom_three', ['custom_three_path']),
     ]
     for conditional, key_list in conditional_list:
         if args[conditional]:
             temp_paths = [args[path_key] for path_key in key_list]
             raster_input_list += temp_paths
-            temp_align_paths = [file_registry[f'aligned_{path_key[:-5]}'] for path_key in key_list]
+            temp_align_paths = [
+                file_registry[f'aligned_{path_key[:-5]}'] for path_key in key_list]
             aligned_input_list += temp_align_paths 
 
     align_task = graph.add_task(
@@ -954,7 +998,9 @@ def execute(args):
             'lulc_projection_wkt': default_wkt,
             'working_dir': intermediate_dir,
         },
-        target_path_list=[file_registry['aligned_pop_count'], file_registry['aligned_pop_density']],
+        target_path_list=[
+            file_registry['aligned_pop_count'],
+            file_registry['aligned_pop_density']],
         task_name='Align and resize population'
     )
 
@@ -963,22 +1009,6 @@ def execute(args):
     habitat_suit_risk_paths = []
     habitat_suit_risk_weights = []
     outputs_to_tile = []
-
-    ### Habitat stability
-    # NOTE: not currently calculating this because we don't have the data.
-    # We are just using a binary water presence raster input
-#    habitat_stability_task = graph.add_task(
-#        _habitat_stability,
-#        kwargs={
-#            'water_presence_path': file_registry['aligned_water_presence'],
-#            'months': 1.75,
-#            'target_raster_path': file_registry['habitat_stability_suit'],
-#        },
-#        target_path_list=[file_registry['habitat_stability_suit']],
-#        task_name='habitat stability')
-#    suitability_tasks.append(habitat_stability_task)
-#    habitat_suit_risk_paths.append(file_registry['habitat_stability_suit'])
-#    outputs_to_tile.append((file_registry['habitat_stability_suit'], default_color_path))
 
 
     ### Water velocity
@@ -1184,20 +1214,21 @@ def execute(args):
     ### Custom functions provided by user
     for custom_index in ['one', 'two', 'three']:
         if args[f'calc_custom_{custom_index}']:
+            target_key = f'custom_suit_{custom_index}'
             custom_task = graph.add_task(
                 suit_func_to_use[f'custom_{custom_index}']['func_name'],
                 args=(
-                    file_registry[f'aligned_ndvi_{season}'],
-                    file_registry[f'ndvi_suit_{season}'],
+                    file_registry[f'aligned_custom_{custom_index}'],
+                    file_registry[target_key],
                 ),
-                kwargs=suit_func_to_use['ndvi']['func_params'],
+                kwargs=suit_func_to_use[f'custom_{custom_index}']['func_params'],
                 dependent_task_list=[align_task],
-                target_path_list=[file_registry[f'ndvi_suit_{season}']],
-                task_name=f'NDVI Suit for {season}')
-            suitability_tasks.append(ndvi_task)
-            habitat_suit_risk_paths.append(file_registry[f'ndvi_suit_{season}'])
-            habitat_suit_risk_weights.append(float(args[f'ndvi_{season}_weight']))
-            outputs_to_tile.append((file_registry[f'ndvi_suit_{season}'], default_color_path))
+                target_path_list=[file_registry[target_key]],
+                task_name=f'Custom Suit for {custom_index}')
+            suitability_tasks.append(custom_task)
+            habitat_suit_risk_paths.append(file_registry[target_key])
+            habitat_suit_risk_weights.append(float(args[f'custom_{custom_index}_weight']))
+            outputs_to_tile.append((file_registry[target_key], default_color_path))
 
 
     ### Population proximity to water
@@ -1350,15 +1381,6 @@ def execute(args):
 
     graph.close()
     graph.join()
-
-    # Write color profiles to text file for gdaldem 
-    default_color_path = os.path.join(color_profiles_dir, 'generic-risk-style.txt')
-    pop_color_path = os.path.join(color_profiles_dir, 'generic-pop-risk-style.txt')
-    color_path_list = [default_color_path, pop_color_path]
-    for color_profile, profile_path in zip([GENERIC_RISK, POP_RISK], color_path_list):
-        with open(profile_path, 'w') as f:
-            for break_key, rgb_val in color_profile.items():
-                f.write(break_key + ' ' + rgb_val + '\n')
 
     ### Tile outputs
     #tile_task = graph.add_task(

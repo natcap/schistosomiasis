@@ -215,7 +215,7 @@ FUNC_PARAMS = {
     }
 }
 
-def user_input_id(input_id):
+def custom_input_id(input_id):
     return {
         f'custom_{input_id}_{fn}_param_{key}': {
             **spec,
@@ -226,7 +226,7 @@ def user_input_id(input_id):
         for fn in FUNCS for key, spec in SPEC_FUNC_COLS[fn].items()
     }
 
-FUNC_PARAMS_USER = user_input_id
+FUNC_PARAMS_USER = custom_input_id
 
 def temp_spec_func_types(default_type):
     """Specify multiple default options for temperature."""

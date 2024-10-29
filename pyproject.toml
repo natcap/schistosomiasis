@@ -5,6 +5,9 @@ build-backend = "setuptools.build_meta"
 [tool.setuptools.packages.find]
 where = ["src"]
 
+[tool.setuptools.package-data]
+natcap = ["notebooks/*.ipynb"]
+
 [project]
 name = "schistosomiasis"
 version = "0.1.0"
@@ -24,5 +27,5 @@ api_version = "0.0.1"
 model_name = "Schisto alpha" # user-facing name
 pyname = "natcap.invest.schistosomiasis" # importable name
 model_id = "schistosomiasis" # model identifier used internally
-notebook_path = "notebooks/ipyleaflet.ipynb"
+notebook_path = "natcap/notebooks/ipyleaflet.ipynb"
 conda_dependencies = ["python<3.13.0", "gdal>=3.9.0"]

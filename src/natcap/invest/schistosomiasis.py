@@ -28,6 +28,8 @@ from osgeo import osr
 
 import matplotlib.pyplot as plt
 
+gdal.UseExceptions()
+
 LOGGER = logging.getLogger(__name__)
 
 logging.getLogger('taskgraph').setLevel('DEBUG')
@@ -1296,6 +1298,8 @@ def execute(args):
         target_path_list=[convolved_hab_risk_path],
         dependent_task_list=[kernel_task, weighted_mean_task])
     outputs_to_tile.append((convolved_hab_risk_path, default_color_path))
+
+    # TODO: mask convolved output by AOI
         
     # min-max normalize the absolute risk convolution.
     # min is known to be 0, so we don't misrepresent positive risk values.
@@ -1368,10 +1372,8 @@ def execute(args):
         outputs_to_tile.append((risk_to_pop_count_path, pop_color_path))
 
 
-    # NOTE: saving a companion jupyter-layers.txt file for the notebook to be able
-    # display only the currently selected risk layers over the http server.
-    # TODO: make a general notebook JSON config output. include:
-    #     - Bounds, or extents to center the map on, lat,lon
+    # For the notebook to be able to display only the currently selected
+    # risk layers over the http server, write to json config
     nb_json_config['layers'] = []
     for raster_path, _ in outputs_to_tile:
         base_name = os.path.splitext(os.path.basename(raster_path))[0]
@@ -1393,6 +1395,7 @@ def execute(args):
     #    dependent_task_list=suitability_tasks)
     for raster_path, color_path in outputs_to_tile:
         _tile_raster(raster_path, color_path)
+        break
 
 
     LOGGER.info("Model completed")
@@ -1573,10 +1576,9 @@ def _tile_raster(raster_path, color_relief_path):
     if not os.path.isdir(tile_dir):
         os.mkdir(tile_dir)
     gdaldem_cmd = f'gdaldem color-relief -q -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
-    subprocess.call(gdaldem_cmd, shell=True)
-    tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 {rgb_raster_path} {tile_dir}'
-    print(tile_cmd)
-    subprocess.call(tile_cmd, shell=True)
+    subprocess.run(gdaldem_cmd, shell=True)
+    tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 -w leaflet {rgb_raster_path} {tile_dir}'
+    subprocess.run(tile_cmd, shell=True)
 
 def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):
     input_array = pygeoprocessing.raster_to_numpy_array(input_raster_path).flatten()

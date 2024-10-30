@@ -904,30 +904,35 @@ def execute(args):
             nb_json_config['plot_paths'].append(plot_png_name)
     
     # Handle Temperature separately because of snail, parasite pairing
-    suitability_keys = ['snail_water_temp', 'parasite_water_temp']
-    for suit_key in suitability_keys:
-        func_type = args[f'{suit_key}_func_type']
-        if func_type in ['sh', 'sm', 'bg', 'bt']:
-            func_params = {'op_key': func_type}
-            user_func = DEFAULT_FUNC_TYPES['temperature']
-        else:
-            func_params = {}
-            for key in SPEC_FUNC_COLS[func_type].keys():
-                func_params[key] = float(args[f'{suit_key}_{func_type}_param_{key}'])
-            user_func = FUNC_TYPES[func_type]
+    temperature_suit_keys = ['snail_water_temp', 'parasite_water_temp']
+    # Skip if temperature is not selected
+    if args['calc_temperature']:
+        for suit_key in temperature_suit_keys:
+            func_type = args[f'{suit_key}_func_type']
+            if func_type in ['sh', 'sm', 'bg', 'bt']:
+                func_params = {'op_key': func_type}
+                user_func = DEFAULT_FUNC_TYPES['temperature']
+            else:
+                func_params = {}
+                for key in SPEC_FUNC_COLS[func_type].keys():
+                    func_params[key] = float(args[f'{suit_key}_{func_type}_param_{key}'])
+                user_func = FUNC_TYPES[func_type]
 
-        suit_func_to_use[suit_key] = {
-            'func_name':user_func,
-            'func_params':func_params,
-        }
+            suit_func_to_use[suit_key] = {
+                'func_name':user_func,
+                'func_params':func_params,
+            }
 
-        results = _generic_func_values(
-            user_func, PLOT_PARAMS['temperature'], intermediate_dir, func_params)
-        plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
-        _plotter(
-            results[0], results[1], save_path=plot_path,
-            label_x=suit_key, label_y=func_type,
-            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+            plot_png_name = f"{suit_key}-{func_type}.png"
+            results = _generic_func_values(
+                user_func, PLOT_PARAMS['temperature'], intermediate_dir, func_params)
+            plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
+            _plotter(
+                results[0], results[1], save_path=plot_path,
+                label_x=suit_key, label_y=func_type,
+                title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+            # Track the current plots in the NB json config
+            nb_json_config['plot_paths'].append(plot_png_name)
 
     # Get the extents and center of the AOI for notebook companion
     aoi_info = pygeoprocessing.get_vector_info(args['aoi_vector_path'])
@@ -1395,7 +1400,6 @@ def execute(args):
     #    dependent_task_list=suitability_tasks)
     for raster_path, color_path in outputs_to_tile:
         _tile_raster(raster_path, color_path)
-        break
 
 
     LOGGER.info("Model completed")
@@ -1575,8 +1579,10 @@ def _tile_raster(raster_path, color_relief_path):
 
     if not os.path.isdir(tile_dir):
         os.mkdir(tile_dir)
+    LOGGER.info(f'Creating stylized raster for {base_name}')
     gdaldem_cmd = f'gdaldem color-relief -q -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
     subprocess.run(gdaldem_cmd, shell=True)
+    LOGGER.info(f'Creating tiles for {base_name}')
     tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 -w leaflet {rgb_raster_path} {tile_dir}'
     subprocess.run(tile_cmd, shell=True)
 

@@ -1,8 +1,11 @@
-"""Setup arguments and call schisto module."""
+"""Preprocess data for Schistosomiasis.
+
+This script clips and reprojects data needed for the
+Schisto model.
+"""
 import argparse
 import logging
 import os
-import re
 import sys
 
 import numpy
@@ -12,8 +15,6 @@ from pygeoprocessing import geoprocessing
 import taskgraph
 from osgeo import gdal
 from osgeo import osr
-
-from src.natcap.invest import schistosomiasis
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -25,6 +26,7 @@ LOGGER = logging.getLogger(__name__)
 
 logging.getLogger('taskgraph').setLevel('DEBUG')
 
+### Set up areas of interest and a projected spatial reference.
 _SENEGAL_EPSG = 32628 # WGS 84 / UTM zone 28N
 _SENEGAL_SRS = osr.SpatialReference()
 _SENEGAL_SRS.ImportFromEPSG(_SENEGAL_EPSG)
@@ -37,6 +39,7 @@ _CIV_EPSG = 2043 # Abidjan 1987 / UTM zone 29N
 _CIV_SRS = osr.SpatialReference()
 _CIV_SRS.ImportFromEPSG(_CIV_EPSG)
 
+# A dictionary that defines parameters for an area
 LOCATION_MAP = {
     'sen': {
         'srs': _SENEGAL_SRS, 'dir_name': 'Senegal', 'epsg': _SENEGAL_EPSG,
@@ -49,6 +52,7 @@ LOCATION_MAP = {
         'aoi_dirs': ['tan_aoi', 'TZA_lsib_0']},
     }
 
+# nodata values to use throughout the script
 UINT32_NODATA = int(numpy.iinfo(numpy.uint32).max)
 FLOAT32_NODATA = float(numpy.finfo(numpy.float32).min)
 BYTE_NODATA = 255
@@ -67,7 +71,20 @@ def define_nodata(raster_path, output_path, nodata_value):
         nodata_value)
 
 def _gdal_warp(target_path, input_path, dstSRS, xRes=None, yRes=None):
-    """Taskgraph wrapper for gdal warp."""
+    """Taskgraph wrapper for gdal warp.
+
+    Reproject ``input_path`` given a spatial reference.
+
+    Args:
+        target_path (string): The path to save the reprojected raster.
+        input_path (string): The path to a raster to reproject. 
+        dstSRS (string): A gdal OSR spatial reference to project to.
+        xRes (int): An optional pixel size to scale to
+        yRes (int): An optional pixel size to scale to
+
+    Returns:
+        Nothing   
+    """
     kwargs={
         'destNameOrDestDS': target_path,
         'srcDSOrSrcDSTab': input_path,
@@ -78,12 +95,21 @@ def _gdal_warp(target_path, input_path, dstSRS, xRes=None, yRes=None):
     gdal.Warp(**kwargs)
 
 def _pop_density_to_count(pop_density_path, target_path):
-    """ """
+    """Convert population density to population count.
+
+    Args:
+        pop_density_path (string): The path to a population density raster
+        target_raster_path (string): The path to where the target raster with
+            converted units should be saved
+
+    Returns:
+        Nothing
+    """
     population_raster_info = pygeoprocessing.get_raster_info(pop_density_path)
     pop_pixel_area = abs(numpy.multiply(*population_raster_info['pixel_size']))
 
     kwargs={
-        'op': lambda x: x*pop_pixel_area,  # convert count per pixel to meters sq to hectares
+        'op': lambda x: x*pop_pixel_area,
         'rasters': [pop_density_path],
         'target_path': target_path,
         'target_nodata': -1,
@@ -142,6 +168,7 @@ def _convert_to_from_density(source_raster_path, target_raster_path,
 
 
 if __name__ == "__main__":
+    current_input_dirs = [val['dir_name'] for key, val in LOCATION_MAP.items()] 
     parser = argparse.ArgumentParser()
     parser.add_argument(
         "--key",
@@ -149,7 +176,11 @@ if __name__ == "__main__":
                " {'sen' | 'tza' | 'civ'}"
     )
 
-    parser.add_argument("--input-dir", help = "Input directory.")
+    parser.add_argument(
+        "--input-dir",
+        help = ("Input directory which should contain the following sub"
+                f" directories: {current_input_dirs}.")
+        )
     parser.add_argument("--output-dir", help = "Directory to save outputs.")
     parser.add_argument(
             "--input-suffix", required=False, default='',
@@ -177,17 +208,17 @@ if __name__ == "__main__":
         input_data, f'habsuit_NDVI_dry_2019_{key_loc}{key_suffix}.tif')
     raw_input_data['ndvi_wet_raster_path'] = os.path.join(
         input_data, f'habsuit_NDVI_wet_2019_{key_loc}{key_suffix}.tif')
-    #raw_input_data['water_presence_path'] = os.path.join(
-    #    procured_data, f'basin_water_mask_{key_loc}.tif')
     raw_input_data['water_presence_path'] = os.path.join(
-        preprocess_dir, f'basin_water_mask_nodata_{key_loc}.tif')
+        procured_data, f'basin_water_mask_{key_loc}.tif')
+    #raw_input_data['water_presence_path'] = os.path.join(
+    #    preprocess_dir, f'basin_water_mask_nodata_{key_loc}.tif')
 
     work_token_dir = os.path.join(preprocess_dir, '_taskgraph_working_dir')
     n_workers = -1  # Synchronous execution
     graph = taskgraph.TaskGraph(work_token_dir, n_workers)
 
     for key, path in raw_input_data.items():
-        # Before warping we need to check that nodata is deined, otherwise
+        # Before warping we need to check that nodata is defined, otherwise
         # this can leave us with artifacts where data is being created
         # during warping that is outside the original extents.
         raster_info = pygeoprocessing.get_raster_info(path)
@@ -206,7 +237,7 @@ if __name__ == "__main__":
                     'nodata_value': pygeoprocessing.choose_nodata(raster_info['datatype']),
                 },
                 target_path_list=[nodata_path],
-                task_name=f'{key_loc} - Reproject {key} to EPSG:{LOCATION_MAP[key_loc]["epsg"]}'
+                task_name=f'{key_loc} - Define nodata to {key}'
             )
             nodata_task_list.append(nodata_task)
 
@@ -244,7 +275,6 @@ if __name__ == "__main__":
         population_count_path = os.path.join(
             preprocess_dir, f'{aoi_name}_landscan_2020.tif')
         landscan_mask_task = graph.add_task(
-            #pygeoprocessing.geoprocessing.mask_raster,
             pygeoprocessing.geoprocessing.align_and_resize_raster_stack,
             kwargs={
                 'base_raster_path_list': [landscan_pop_path],
@@ -258,8 +288,6 @@ if __name__ == "__main__":
             target_path_list=[population_count_path],
             task_name=f'Mask landscan by AOI: {aoi_name}'
         )
-        #population_count_path = os.path.join(
-        #    procured_data, f'{key_loc}_pd_2020_1km_UNadj.tif')
         population_density_path = os.path.join(
             preprocess_dir, f'{aoi_name}_population_density.tif')
         # Population count to population density
@@ -308,8 +336,4 @@ if __name__ == "__main__":
     # Already projected to local projection 32628 via voila web app
     # 30 x 30 resolution (1-arcsecond, 0.000277777777778 degrees)
     dem_path = os.path.join(procured_data, f'srtm-{key_loc}-projected.tiff')
-    # For development and testing purposes use an already pit filled DEM
-    # Doing this because TaskGraph was NOT reading this task as already
-    # completed and was always recalculating, which was slow for development.
-    #dem_path = os.path.join(procured_data, 'pit_filled_dem.tif')
 

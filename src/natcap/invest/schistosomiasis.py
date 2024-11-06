@@ -1376,6 +1376,25 @@ def execute(args):
             task_name=f'risk to pop_count {calc_type}')
         outputs_to_tile.append((risk_to_pop_count_path, pop_color_path))
 
+    # Save AOI as GeoJSON for companion notebook
+    target_srs = osr.SpatialReference()
+    target_srs.ImportFromEPSG(4326)
+    target_wkt = target_srs.ExportToWKT()
+    aoi_geojson_path = os.path.join(
+        output_dir, f'aoi_geojson{suffix}.geojson')
+
+    aoi_geojson_task = graph.add_task(
+        func=pygeoprocessing.reproject_vector,
+        kwargs={
+            'base_vector_path': args['aoi_vector_path'],
+            'target_projection_wkt': target_wkt,
+            'target_path': aoi_geojson_path,
+            'driver_name': 'GeoJSON',
+            'copy_fields': False,
+            },
+        target_path_list=[aoi_geojson_path],
+        task_name=f'reproject aoi to geojson')
+    nb_json_config['aoi_geojson'] = os.path.basename(aoi_geojson_path)
 
     # For the notebook to be able to display only the currently selected
     # risk layers over the http server, write to json config

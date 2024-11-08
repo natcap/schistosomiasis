@@ -1379,7 +1379,7 @@ def execute(args):
     # Save AOI as GeoJSON for companion notebook
     target_srs = osr.SpatialReference()
     target_srs.ImportFromEPSG(4326)
-    target_wkt = target_srs.ExportToWKT()
+    target_wkt = target_srs.ExportToWkt()
     aoi_geojson_path = os.path.join(
         output_dir, f'aoi_geojson{suffix}.geojson')
 

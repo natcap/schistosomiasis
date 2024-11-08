@@ -19,7 +19,8 @@ dependencies = [
     "voila",
     "jupyter",
     "ipyleaflet",
-    "ipywidgets"
+    "ipywidgets",
+    "geojson"
 ]
 
 [tool.natcap.invest]

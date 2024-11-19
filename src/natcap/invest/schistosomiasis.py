@@ -796,15 +796,6 @@ def execute(args):
         #'water_proximity': _water_proximity,
         'water_depth': _water_depth_suit,
         }
-    PLOT_PARAMS = {
-        'temperature': (0, 50),
-        'ndvi': (-1, 1),
-        'population': (0, 10),
-        'urbanization': (0, 10),
-        'water_velocity': (0, 30),
-        #'water_proximity': (0, 1000),
-        'water_depth': (0, 2000),
-        }
 
     output_dir = os.path.join(args['workspace_dir'], 'output')
     intermediate_dir = os.path.join(args['workspace_dir'], 'intermediate')
@@ -846,7 +837,9 @@ def execute(args):
     nb_json_config_path = os.path.join(output_dir, 'nb-json-config.json')
     nb_json_config = {}
 
-    ### Save plots of function choices
+    # Dictionary mapping function and parameters to suitability input.
+    suit_func_to_use = {}
+    
     # Read func params from table
     # Excluding 'water_proximity' for now.
     # TODO: determine whether to display population, urbanization, or 
@@ -854,18 +847,12 @@ def execute(args):
     suitability_keys = [
         ('ndvi', args['calc_ndvi']),
         ('population', True),
-        ('water_velocity', args['calc_water_velocity']),
         ('urbanization', True),
+        ('water_velocity', args['calc_water_velocity']),
         ('water_depth', args['calc_water_depth']),
         ('custom_one', args['calc_custom_one']),
         ('custom_two', args['calc_custom_two']),
         ('custom_three', args['calc_custom_three'])]
-
-    # Dictionary mapping function and parameters to suitability input.
-    suit_func_to_use = {}
-    # Store plot path locations to display in Jupyter Notebook
-    nb_json_config['plot_paths'] = []
-    
     for suit_key, calc_suit in suitability_keys:
         # Skip non selected suitability metrics
         if not calc_suit:
@@ -889,19 +876,6 @@ def execute(args):
             'func_name':user_func,
             'func_params':func_params
         }
-
-        # Currently can't guess range of custom inputs for plotting
-        if not suit_key.startswith('custom'):
-            plot_png_name = f"{suit_key}-{func_type}.png"
-            results = _generic_func_values(
-                user_func, PLOT_PARAMS[suit_key], intermediate_dir, func_params)
-            plot_path = os.path.join(func_plot_dir, plot_png_name)
-            _plotter(
-                results[0], results[1], save_path=plot_path,
-                label_x=suit_key, label_y=func_type,
-                title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
-            # Track the current plots in the NB json config
-            nb_json_config['plot_paths'].append(plot_png_name)
     
     # Handle Temperature separately because of snail, parasite pairing
     temperature_suit_keys = ['snail_water_temp', 'parasite_water_temp']
@@ -922,17 +896,6 @@ def execute(args):
                 'func_name':user_func,
                 'func_params':func_params,
             }
-
-            plot_png_name = f"{suit_key}-{func_type}.png"
-            results = _generic_func_values(
-                user_func, PLOT_PARAMS['temperature'], intermediate_dir, func_params)
-            plot_path = os.path.join(func_plot_dir, f"{suit_key}-{func_type}.png")
-            _plotter(
-                results[0], results[1], save_path=plot_path,
-                label_x=suit_key, label_y=func_type,
-                title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
-            # Track the current plots in the NB json config
-            nb_json_config['plot_paths'].append(plot_png_name)
 
     # Get the extents and center of the AOI for notebook companion
     aoi_info = pygeoprocessing.get_vector_info(args['aoi_vector_path'])
@@ -1016,7 +979,6 @@ def execute(args):
     habitat_suit_risk_paths = []
     habitat_suit_risk_weights = []
     outputs_to_tile = []
-
 
     ### Water velocity
     if args['calc_water_velocity']:
@@ -1258,7 +1220,6 @@ def execute(args):
 
     ### Convolve habitat suit weighted mean over land
 
-    # TODO: add decay dist to be an input to the model
     # TODO: mask out water bodies to nodata and not include in risk
     #decay_dist_m = 5000
     #decay_dist_m = 15 * 1000
@@ -1402,11 +1363,65 @@ def execute(args):
     for raster_path, _ in outputs_to_tile:
         base_name = os.path.splitext(os.path.basename(raster_path))[0]
         nb_json_config['layers'].append(base_name)
-    with open(nb_json_config_path, 'w', encoding='utf-8') as f:
-        json.dump(nb_json_config, f, ensure_ascii=False, indent=4)
 
     graph.close()
     graph.join()
+    
+    ### Save plots of function choices
+    # Read func params from table
+    # Excluding 'water_proximity' for now.
+    # TODO: determine whether to display population, urbanization, or 
+    # something else.
+    # Store plot path locations to display in Jupyter Notebook
+    nb_json_config['plot_paths'] = []
+
+    suitability_keys = [
+        ('ndvi', args['calc_ndvi'], args['ndvi_dry_path']),
+        ('population', True, file_registry['population_hectares']),
+        ('water_velocity', args['calc_water_velocity'], file_registry[f'slope']),
+        ('water_depth', args['calc_water_depth'], file_registry[f'distance_from_shore']),
+        ('custom_one', args['calc_custom_one'], args['custom_one_path']),
+        ('custom_two', args['calc_custom_two'], args['custom_two_path']),
+        ('custom_three', args['calc_custom_three'], args['custom_three_path']),
+        ('snail_water_temp', args['calc_temperature'], args['water_temp_dry_path']),
+        ('parasite_water_temp', args['calc_temperature'], args['water_temp_dry_path'])]
+
+    for suit_key, calc_suit, raster_path in suitability_keys:
+        # Skip non selected suitability metrics
+        if not calc_suit:
+            continue
+
+        user_func = suit_func_to_use[suit_key]['func_name']
+        func_params = suit_func_to_use[suit_key]['func_params']
+        # Urbanization and water depth have static functions
+        if suit_key in ['urbanization', 'water_depth']:
+            func_type = 'default'
+        else:
+            func_type = args[f'{suit_key}_func_type']
+        
+        # Use input raster range to plot against function
+        plot_png_name = f"{suit_key}-{func_type}.png"
+        plot_raster = gdal.OpenEx(raster_path)
+        plot_band = plot_raster.GetRasterBand(1)
+        min_max_val = plot_band.ComputeRasterMinMax(True)
+        plot_band = None
+        plot_raster = None
+        LOGGER.debug(
+            f"finished computing min/max for {suit_key}: {min_max_val}")
+
+        results = _generic_func_values(
+            user_func, min_max_val, intermediate_dir, func_params)
+        plot_path = os.path.join(func_plot_dir, plot_png_name)
+        _plotter(
+            results[0], results[1], save_path=plot_path,
+            label_x=suit_key, label_y=func_type,
+            title=f'{suit_key}--{func_type}', xticks=None, yticks=None)
+        # Track the current plots in the NB json config
+        nb_json_config['plot_paths'].append(plot_png_name)
+
+    # Write out the notebook json config
+    with open(nb_json_config_path, 'w', encoding='utf-8') as f:
+        json.dump(nb_json_config, f, ensure_ascii=False, indent=4)
 
     ### Tile outputs
     #tile_task = graph.add_task(
@@ -1604,14 +1619,6 @@ def _tile_raster(raster_path, color_relief_path):
     LOGGER.info(f'Creating tiles for {base_name}')
     tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 -w leaflet {rgb_raster_path} {tile_dir}'
     subprocess.run(tile_cmd, shell=True)
-
-def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):
-    input_array = pygeoprocessing.raster_to_numpy_array(input_raster_path).flatten()
-    output_array = pygeoprocessing.raster_to_numpy_array(output_raster_path).flatten()
-    _plotter(
-        input_array, output_array, save_path=plot_path,
-        label_x=suit_name, label_y=func_name,
-        title=f'{suit_name}--{func_name}', xticks=None, yticks=None)
 
 
 def _degree_op(slope): return numpy.degrees(numpy.arctan(slope / 100.0))
@@ -2031,7 +2038,7 @@ def _generic_func_values(func_op, xrange, working_dir, kwargs):
 
     The point of this function is to be able to plot values in ``xrange``
     against ``func_op(x)``. Since ``func_op`` expects a raster to operate on
-    we create a one with the values of ``xrange`` to pass in.
+    we create one with the values of ``xrange`` to pass in.
 
     Args:
         func_op (string): 

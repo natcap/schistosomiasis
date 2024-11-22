@@ -20,7 +20,8 @@ dependencies = [
     "jupyter",
     "ipyleaflet",
     "ipywidgets",
-    "geojson"
+    "geojson",
+    "gdal-utils"
 ]
 
 [tool.natcap.invest]
@@ -29,4 +30,4 @@ model_name = "Schistosomiasis" # user-facing name
 pyname = "natcap.invest.schistosomiasis" # importable name
 model_id = "schistosomiasis" # model identifier used internally
 notebook_path = "natcap/notebooks/ipyleaflet.ipynb"
-conda_dependencies = ["python<3.13.0", "gdal<3.10.0", "setuptools<70"]
+conda_dependencies = ["python<3.13.0", "gdal>=3.9.0", "setuptools<70"]

@@ -25,6 +25,7 @@ import pygeoprocessing.kernels
 import taskgraph
 from osgeo import gdal
 from osgeo import osr
+from osgeo_utils import gdal2tiles
 
 import matplotlib.pyplot as plt
 
@@ -1602,8 +1603,11 @@ def _tile_raster(raster_path, color_relief_path):
     gdaldem_cmd = f'gdaldem color-relief -q -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
     subprocess.run(gdaldem_cmd, shell=True)
     LOGGER.info(f'Creating tiles for {base_name}')
-    tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 -w leaflet {rgb_raster_path} {tile_dir}'
-    subprocess.run(tile_cmd, shell=True)
+    tile_cmd = [
+        '--verbose', '--xyz', '--resampling=near', '--quiet',
+        '--resume', '--zoom=1-12', '--process=4', 
+        '--webviewer=leaflet', rgb_raster_path, tile_dir]
+    gdal2tiles.main(tile_cmd)
 
 def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):
     input_array = pygeoprocessing.raster_to_numpy_array(input_raster_path).flatten()

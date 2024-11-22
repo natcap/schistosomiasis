@@ -1602,7 +1602,7 @@ def _tile_raster(raster_path, color_relief_path):
     gdaldem_cmd = f'gdaldem color-relief -q -alpha -co COMPRESS=LZW {raster_path} {color_relief_path} {rgb_raster_path}'
     subprocess.run(gdaldem_cmd, shell=True)
     LOGGER.info(f'Creating tiles for {base_name}')
-    tile_cmd = f'gdal2tiles-script.py --xyz -r near -q -e --zoom=1-10 --process=4 -w leaflet {rgb_raster_path} {tile_dir}'
+    tile_cmd = f'gdal2tiles --xyz -r near -q -e --zoom=1-10 --process=4 -w leaflet {rgb_raster_path} {tile_dir}'
     subprocess.run(tile_cmd, shell=True)
 
 def _plot_results(input_raster_path, output_raster_path, plot_path, suit_name, func_name):

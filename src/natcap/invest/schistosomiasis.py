@@ -1222,8 +1222,6 @@ def execute(args):
     ### Convolve habitat suit weighted mean over land
 
     # TODO: mask out water bodies to nodata and not include in risk
-    #decay_dist_m = 5000
-    #decay_dist_m = 15 * 1000
     decay_dist_m = float(args['decay_distance'])
 
     kernel_path = os.path.join(
@@ -1251,7 +1249,7 @@ def execute(args):
 
     convolved_hab_risk_path = os.path.join(
         output_dir,
-        f'convolved_hab_risk{suffix}.tif')
+        f'unmasked_convolved_hab_risk{suffix}.tif')
     convolved_hab_risk_task = graph.add_task(
         _convolve_and_set_lower_bound,
         kwargs={
@@ -1263,20 +1261,34 @@ def execute(args):
         },
         task_name=f'Convolve hab risk - {decay_dist_m}m',
         target_path_list=[convolved_hab_risk_path],
-        dependent_task_list=[kernel_task, weighted_mean_task])
-    outputs_to_tile.append((convolved_hab_risk_path, default_color_path))
+    )
 
-    # TODO: mask convolved output by AOI
+    # mask convolved output by AOI
+    masked_convolved_path = os.path.join(
+        output_dir,
+        f'convolved_hab_risk{suffix}.tif')
+    mask_aoi_task = graph.add_task(
+        pygeoprocessing.mask_raster,
+        kwargs={
+            'base_raster_path_band': (convolved_hab_risk_path, 1),
+            'mask_vector_path': args['aoi_vector_path'],
+            'target_mask_raster_path': masked_convolved_path,
+        },
+        target_path_list=[masked_convolved_path],
+        dependent_task_list=[convolved_hab_risk_task],
+        task_name='Mask convolved raster by AOI'
+    )
+    outputs_to_tile.append((masked_convolved_path, default_color_path))
         
     # min-max normalize the absolute risk convolution.
     # min is known to be 0, so we don't misrepresent positive risk values.
     normalize_task = graph.add_task(
         _normalize_raster,
         kwargs={
-            'raster_path': convolved_hab_risk_path,
+            'raster_path': masked_convolved_path,
             'target_path': file_registry['normalized_convolved_risk'],
         },
-        dependent_task_list=[convolved_hab_risk_task],
+        dependent_task_list=[mask_aoi_task],
         target_path_list=[file_registry['normalized_convolved_risk']],
         task_name=f'Normalize convolved risk')
     outputs_to_tile.append((file_registry['normalized_convolved_risk'], default_color_path))
@@ -1288,7 +1300,7 @@ def execute(args):
 #    mask_convolve_task = graph.add_task(
 #        _water_mask_op,
 #        kwargs={
-#            'input_path': convolved_hab_risk_path,
+#            'input_path': masked_convolved_path,
 #            'mask_path': file_registry['aligned_water_presence'],
 #            'target_path': masked_convolved_path,
 #        },
@@ -1296,8 +1308,8 @@ def execute(args):
 #        target_path_list=[masked_convolved_path],
 #        dependent_task_list=[convolved_hab_risk_task])
 
-    base_risk_path_list = [convolved_hab_risk_path, file_registry['normalized_convolved_risk']] 
-    base_task_list = [normalize_task, convolved_hab_risk_task] 
+    base_risk_path_list = [masked_convolved_path, file_registry['normalized_convolved_risk']] 
+    base_task_list = [mask_aoi_task, normalize_task] 
     for calc_type, base_risk_path, base_task in zip(['abs', 'rel'], base_risk_path_list, base_task_list):
         ### Weight convolved risk by urbanization
         risk_to_pop_path = os.path.join(

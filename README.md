@@ -33,7 +33,7 @@ features to allow a better experience to define the shape of functions.
 - Visualizing results with Jupyter Notebooks. We’re looking to bring this
 type of functionality to InVEST generally, but are still early days in
 designing and fleshing out use cases. Specifically, the version of InVEST
-being used is found under the plugin/schisto branch of the repo.
+being used is found under the `plugin/schisto` branch of the repo.
 
 
 **Download schist-invest**: [a link to download invest]
@@ -41,13 +41,13 @@ being used is found under the plugin/schisto branch of the repo.
 **Install plugin into schisto-invest**
 To install the custom version of InVEST for schistosomiasis and the plugin
 follow these steps.
-1) Download and extract the Windows executable from here a. Mac installer
-coming soon!
+1) Download and extract the Windows executable from here.
+    a. Mac installer coming soon!
 2) Run the executable. Currently you’ll get a notification that this
 software isn’t trusted and will have to select “more info” to continue with
 installing. This is because we aren’t currently code signing this with our
 certificate. We can look into that as a possibility, if needed.
-  a. Install for user only and NOT all users. There’s currently a
+    a. Install for user only and NOT all users. There’s currently a
   permission limitation if installing system wide, which we’re looking to
   fix in the future.
 3) Finish and launch the InVEST Workbench.

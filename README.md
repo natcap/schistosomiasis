@@ -15,6 +15,9 @@ from the De Leo Lab, and Lisa Mandle and Doug Denu from the Natural Capital Proj
 Add info here about the schistosomiasis model, inputs, calculating risk.
 Essentially could be the user guide section.
 
+**Data*
+- Spatial inputs must have the same projection and be projected with units of meters.
+
 ## Developer Guide
 
 ### Running in InVEST

@@ -16,7 +16,7 @@ dependencies = [
     "taskgraph",
     "matplotlib",
     #"natcap.invest @ git+https://github.com/natcap/invest.git@feature/plugins",
-    "natcap.invest @ git+https://github.com/natcap/schistosomiasis-invest.git@feature/plugins-sans-c",
+    "natcap.invest @ git+https://github.com/natcap/schistosomiasis-invest.git@plugin/schisto",
     "voila",
     "jupyter",
     "ipyleaflet",

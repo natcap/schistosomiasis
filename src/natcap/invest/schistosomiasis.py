@@ -263,7 +263,7 @@ TEMP_SPEC_FUNC_TYPES = temp_spec_func_types
 
 MODEL_SPEC = {
     'model_id': 'schistosomiasis',
-    'model_name': gettext(SCHISTO),
+    'model_title': gettext(SCHISTO),
     'pyname': 'natcap.invest.schistosomiasis',
     'userguide': "schistosomiasis.html",
     'aliases': (),

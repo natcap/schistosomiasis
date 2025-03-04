@@ -22,7 +22,7 @@ dependencies = [
     "ipyleaflet",
     "ipywidgets",
     "geojson",
-    #"gdal-utils"
+    "gdal-utils"
 ]
 
 [tool.natcap.invest]

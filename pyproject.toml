@@ -30,4 +30,4 @@ api_version = "0.1.0"
 model_title = "Schistosomiasis" # user-facing name
 model_id = "schistosomiasis" # model identifier used internally
 notebook_path = "natcap/notebooks/ipyleaflet.ipynb"
-conda_dependencies = ["python<3.13.0", "gdal>=3.9.0", "setuptools<70", "sqlite<3.49.1"]
+conda_dependencies = ["python<3.13.0", "gdal>=3.9.0", "setuptools<70", "sqlite<3.49.1", "libsqlite<3.49.1"]
